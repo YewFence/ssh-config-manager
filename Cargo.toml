@@ -1,0 +1,15 @@
+[package]
+name = "sshm"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "sshm"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+inquire = "0.7"
+anyhow = "1"
+comfy-table = "7"
+dirs = "5"
