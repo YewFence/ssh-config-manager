@@ -94,21 +94,22 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
             if s.is_empty() || s.parse::<u16>().is_ok() {
                 Ok(Validation::Valid)
             } else {
-                Ok(Validation::Invalid("Port must be a number between 1 and 65535.".into()))
+                Ok(Validation::Invalid(
+                    "Port must be a number between 1 and 65535.".into(),
+                ))
             }
         })
         .prompt()?;
     let port = port_input.parse::<u16>().ok();
 
     let default_identity = flags.identity_file.as_deref().unwrap_or("").to_string();
-    let identity_input = Text::new("IdentityFile (path, leave blank to skip):")
+    let identity_input = Text::new("IdentityFile (path, filename, or paste public key):")
         .with_default(&default_identity)
+        .with_help_message(
+            "filename → auto-prefix ~/.ssh/ | pubkey content → saved to ~/.ssh/<name>.pub",
+        )
         .prompt()?;
-    let identity_file = if identity_input.is_empty() {
-        None
-    } else {
-        Some(identity_input)
-    };
+    let identity_file = super::resolve_identity_file(&identity_input, &hostname)?;
 
     let default_proxy = flags.proxy_jump.as_deref().unwrap_or("").to_string();
     let proxy_input = Text::new("ProxyJump (host alias, leave blank to skip):")
