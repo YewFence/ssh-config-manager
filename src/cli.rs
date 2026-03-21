@@ -56,4 +56,10 @@ pub enum Commands {
         /// Host alias name to delete
         name: String,
     },
+
+    /// Scan for unused key files in ~/.ssh
+    Prune,
+
+    /// Open ~/.ssh directory in system file manager
+    Open,
 }

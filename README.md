@@ -87,6 +87,32 @@ sshm e myserver
 
 现有字段会作为默认值预填，直接回车保持不变。
 
+### 删除 host
+
+```bash
+sshm delete myserver
+# 或简写
+sshm d myserver
+```
+
+会在删除前要求确认。
+
+### 扫描未引用的密钥文件
+
+```bash
+sshm prune
+```
+
+扫描 `~/.ssh/` 目录，列出未被任何 Host 配置引用的密钥文件。只读不修改，方便手动清理。
+
+### 打开 ~/.ssh 目录
+
+```bash
+sshm open
+```
+
+用系统默认文件管理器打开 `~/.ssh/` 目录（Windows: Explorer, macOS: Finder, Linux: xdg-open）。无图形环境时会打印路径。
+
 ## 说明
 
 - 读写 `~/.ssh/config`，不存储任何密钥内容

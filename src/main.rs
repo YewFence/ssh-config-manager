@@ -32,5 +32,7 @@ fn main() -> Result<()> {
         ),
         Commands::Edit { name } => commands::edit::run(&name, &config_path),
         Commands::Delete { name } => commands::delete::run(&name, &config_path),
+        Commands::Prune => commands::prune::run(&config_path),
+        Commands::Open => commands::open::run(),
     }
 }

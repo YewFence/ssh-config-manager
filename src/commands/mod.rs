@@ -2,6 +2,10 @@ pub mod create;
 pub mod delete;
 pub mod edit;
 pub mod ls;
+pub mod open;
+pub mod prune;
+
+use std::path::PathBuf;
 
 use anyhow::Result;
 use inquire::Text;
@@ -61,6 +65,17 @@ fn is_public_key(s: &str) -> bool {
         "sk-ecdsa-sha2-nistp256 ",
     ];
     prefixes.iter().any(|p| s.starts_with(p))
+}
+
+/// 展开 `~/` 前缀为实际 home 目录路径
+pub fn expand_tilde(path: &str) -> Result<PathBuf> {
+    if let Some(rest) = path.strip_prefix("~/") {
+        let home =
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+        Ok(home.join(rest))
+    } else {
+        Ok(PathBuf::from(path))
+    }
 }
 
 /// hostname 转安全文件名（非字母数字替换为 _）
