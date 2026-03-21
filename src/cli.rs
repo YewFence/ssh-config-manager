@@ -10,7 +10,11 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// List all SSH hosts
-    Ls,
+    Ls {
+        /// Show full hostnames (default: masked)
+        #[arg(long, short)]
+        show: bool,
+    },
 
     /// Create a new SSH host
     #[command(alias = "c")]
@@ -43,6 +47,13 @@ pub enum Commands {
     #[command(alias = "e")]
     Edit {
         /// Host alias name to edit
+        name: String,
+    },
+
+    /// Delete an SSH host
+    #[command(alias = "d")]
+    Delete {
+        /// Host alias name to delete
         name: String,
     },
 }

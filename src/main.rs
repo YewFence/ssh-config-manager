@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     let config_path = config::ssh_config_path()?;
 
     match cli.command {
-        Commands::Ls => commands::ls::run(&config_path),
+        Commands::Ls { show } => commands::ls::run(&config_path, show),
         Commands::Create {
             name,
             hostname,
@@ -31,5 +31,6 @@ fn main() -> Result<()> {
             &config_path,
         ),
         Commands::Edit { name } => commands::edit::run(&name, &config_path),
+        Commands::Delete { name } => commands::delete::run(&name, &config_path),
     }
 }
