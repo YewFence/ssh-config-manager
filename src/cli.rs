@@ -61,5 +61,14 @@ pub enum Commands {
     Prune,
 
     /// Open ~/.ssh directory in system file manager
-    Open,
+    Open {
+        #[command(subcommand)]
+        subcommand: Option<OpenSubcommand>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum OpenSubcommand {
+    /// Open ~/.ssh/config with default editor
+    Config,
 }

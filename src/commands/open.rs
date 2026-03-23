@@ -2,9 +2,36 @@ use std::process::Command;
 
 use anyhow::Result;
 
-pub fn run() -> Result<()> {
+use crate::cli::OpenSubcommand;
+
+pub fn run(subcommand: Option<OpenSubcommand>) -> Result<()> {
     let home =
         dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+
+    if let Some(OpenSubcommand::Config) = subcommand {
+        let config_file = home.join(".ssh").join("config");
+
+        let opened = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(["/c", "start", "", &config_file.to_string_lossy()])
+                .spawn()
+        } else if cfg!(target_os = "macos") {
+            Command::new("open").args(["-t", &config_file.to_string_lossy()]).spawn()
+        } else if let Ok(visual) = std::env::var("VISUAL") {
+            Command::new(&visual).arg(&config_file).spawn()
+        } else if let Ok(editor) = std::env::var("EDITOR") {
+            Command::new(&editor).arg(&config_file).spawn()
+        } else {
+            Command::new("xdg-open").arg(&config_file).spawn()
+        };
+
+        match opened {
+            Ok(_) => println!("Opened {}", config_file.display()),
+            Err(e) => return Err(anyhow::anyhow!("Failed to open editor: {}", e)),
+        }
+        return Ok(());
+    }
+
     let ssh_dir = home.join(".ssh");
 
     let result = if cfg!(target_os = "windows") {
