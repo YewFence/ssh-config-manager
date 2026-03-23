@@ -11,16 +11,16 @@ pub fn run(subcommand: Option<OpenSubcommand>) -> Result<()> {
     if let Some(OpenSubcommand::Config) = subcommand {
         let config_file = home.join(".ssh").join("config");
 
-        let opened = if cfg!(target_os = "windows") {
+        let opened = if let Some(parts) = std::env::var("VISUAL").ok().and_then(parse_editor_cmd) {
+            Command::new(&parts[0]).args(&parts[1..]).arg(&config_file).spawn()
+        } else if let Some(parts) = std::env::var("EDITOR").ok().and_then(parse_editor_cmd) {
+            Command::new(&parts[0]).args(&parts[1..]).arg(&config_file).spawn()
+        } else if cfg!(target_os = "windows") {
             Command::new("cmd")
                 .args(["/c", "start", "", &config_file.to_string_lossy()])
                 .spawn()
         } else if cfg!(target_os = "macos") {
             Command::new("open").args(["-t", &config_file.to_string_lossy()]).spawn()
-        } else if let Ok(visual) = std::env::var("VISUAL") {
-            Command::new(&visual).arg(&config_file).spawn()
-        } else if let Ok(editor) = std::env::var("EDITOR") {
-            Command::new(&editor).arg(&config_file).spawn()
         } else {
             Command::new("xdg-open").arg(&config_file).spawn()
         };
@@ -63,4 +63,9 @@ pub fn run(subcommand: Option<OpenSubcommand>) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn parse_editor_cmd(s: String) -> Option<Vec<String>> {
+    let parts: Vec<String> = s.split_whitespace().map(|s| s.to_string()).collect();
+    if parts.is_empty() { None } else { Some(parts) }
 }
