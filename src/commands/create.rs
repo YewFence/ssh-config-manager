@@ -38,6 +38,11 @@ pub fn run(name: Option<String>, flags: CreateFlags, config_path: &Path) -> Resu
 }
 
 fn build_host_from_flags(name: String, flags: CreateFlags) -> SshHost {
+    let extra = if flags.identity_file.is_none() {
+        vec![("PreferredAuthentications".to_string(), "password".to_string())]
+    } else {
+        vec![]
+    };
     SshHost {
         alias: name,
         hostname: flags.hostname,
@@ -45,7 +50,7 @@ fn build_host_from_flags(name: String, flags: CreateFlags) -> SshHost {
         port: flags.port,
         identity_file: flags.identity_file,
         proxy_jump: flags.proxy_jump,
-        extra: vec![],
+        extra,
     }
 }
 
@@ -121,6 +126,12 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
         Some(proxy_input)
     };
 
+    let extra = if identity_file.is_none() {
+        vec![("PreferredAuthentications".to_string(), "password".to_string())]
+    } else {
+        vec![]
+    };
+
     Ok(SshHost {
         alias,
         hostname: Some(hostname),
@@ -128,6 +139,6 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
         port,
         identity_file,
         proxy_jump,
-        extra: vec![],
+        extra,
     })
 }
