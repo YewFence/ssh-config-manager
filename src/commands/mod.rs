@@ -16,14 +16,14 @@ use inquire::Text;
 /// - 纯文件名（无斜杠）→ 打印提示，返回 ~/.ssh/<filename>
 /// - 完整路径 → 原样返回
 /// - 空 → None
-pub fn resolve_identity_file(input: &str, hostname: &str) -> Result<Option<String>> {
+pub fn resolve_identity_file(input: &str, alias: &str) -> Result<Option<String>> {
     if input.is_empty() {
         return Ok(None);
     }
 
     if is_public_key(input) {
-        let default_name = sanitize_filename(hostname);
-        let name_input = Text::new("Filename for key (leave blank to use hostname):")
+        let default_name = sanitize_filename(alias);
+        let name_input = Text::new("Filename for key (leave blank to use alias):")
             .with_default(&default_name)
             .with_help_message("will be saved as ~/.ssh/<name>.pub")
             .prompt()?;

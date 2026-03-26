@@ -114,7 +114,7 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
             "filename → auto-prefix ~/.ssh/ | pubkey content → saved to ~/.ssh/<name>.pub",
         )
         .prompt()?;
-    let identity_file = super::resolve_identity_file(&identity_input, &hostname)?;
+    let identity_file = super::resolve_identity_file(&identity_input, &alias)?;
 
     let default_proxy = flags.proxy_jump.as_deref().unwrap_or("").to_string();
     let proxy_input = Text::new("ProxyJump (host alias, leave blank to skip):")
