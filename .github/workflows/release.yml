@@ -1,0 +1,181 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: "sshm"
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.get_version.outputs.version }}
+          draft: true
+          generate_release_notes: true
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            platform: linux-amd64
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            platform: linux-arm64
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            platform: macos-amd64
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            platform: macos-arm64
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            platform: windows-amd64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --verbose
+
+      - name: Determine binary name
+        id: bin
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "name=${{ env.BIN_NAME }}.exe" >> $GITHUB_OUTPUT
+            echo "ext=.exe" >> $GITHUB_OUTPUT
+          else
+            echo "name=${{ env.BIN_NAME }}" >> $GITHUB_OUTPUT
+            echo "ext=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Strip binary (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: strip target/${{ matrix.target }}/release/${{ steps.bin.outputs.name }}
+
+      - name: Prepare release binary
+        shell: bash
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          SRC="target/${{ matrix.target }}/release/${{ steps.bin.outputs.name }}"
+          DEST="${{ env.BIN_NAME }}-v${VERSION}-${{ matrix.platform }}${{ steps.bin.outputs.ext }}"
+          cp "$SRC" "$DEST"
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: ${{ env.BIN_NAME }}-v${{ needs.create-release.outputs.version }}-${{ matrix.platform }}${{ steps.bin.outputs.ext }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Dry run publish
+        run: cargo publish --dry-run
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Homebrew Formula
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          BIN="${{ env.BIN_NAME }}"
+          REPO="${{ github.repository }}"
+          TAP_OWNER="${{ vars.HOMEBREW_TAP_OWNER }}"
+          TAP_REPO="${{ vars.HOMEBREW_TAP_REPO }}"
+          CLASS_NAME="${{ vars.HOMEBREW_FORMULA_CLASS }}"
+          DESC="${{ vars.PROJECT_DESCRIPTION }}"
+
+          if [ -z "$TAP_OWNER" ] || [ -z "$TAP_REPO" ]; then
+            echo "HOMEBREW_TAP_OWNER or HOMEBREW_TAP_REPO not set, skipping Homebrew update"
+            exit 0
+          fi
+
+          ./scripts/update-homebrew.sh \
+            "$VERSION" \
+            "$BIN" \
+            "$REPO" \
+            "$TAP_OWNER" \
+            "$TAP_REPO" \
+            "${CLASS_NAME:-Sshm}" \
+            "${DESC:-SSH config manager CLI}"
+
+  publish-release:
+    name: Publish Release
+    needs: [create-release, build, publish-crates, update-homebrew]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const draft = releases.find(r => r.tag_name === context.ref.replace('refs/tags/', ''));
+            if (!draft) {
+              core.setFailed('Draft release not found');
+              return;
+            }
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: draft.id,
+              draft: false,
+            });
+            console.log(`Release published: ${draft.html_url}`);
