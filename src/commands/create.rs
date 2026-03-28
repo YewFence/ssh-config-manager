@@ -126,11 +126,23 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
         Some(proxy_input)
     };
 
-    let extra = if identity_file.is_none() {
+    // 收集 forward 规则
+    let local_forwards = collect_forwards("LocalForward")?;
+    let remote_forwards = collect_forwards("RemoteForward")?;
+
+    let mut extra = if identity_file.is_none() {
         vec![("PreferredAuthentications".to_string(), "password".to_string())]
     } else {
         vec![]
     };
+
+    // 添加 forward 规则到 extra
+    for rule in local_forwards {
+        extra.push(("LocalForward".to_string(), rule));
+    }
+    for rule in remote_forwards {
+        extra.push(("RemoteForward".to_string(), rule));
+    }
 
     Ok(SshHost {
         alias,
@@ -141,4 +153,64 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
         proxy_jump,
         extra,
     })
+}
+
+/// 循环收集 forward 规则，直到用户输入空行为止
+/// 格式: local_port:dest_host:dest_port
+fn collect_forwards(kind: &str) -> Result<Vec<String>> {
+    let mut rules = Vec::new();
+
+    println!("\nAdd {} rules (format: local_port:dest_host:dest_port)", kind);
+    println!("Example: 8080:localhost:80  →  forwards local port 8080 to remote localhost:80");
+    println!("Leave blank and press Enter to skip/continue.\n");
+
+    loop {
+        let prompt = format!("{} [{}]:", kind, rules.len() + 1);
+        let input = Text::new(&prompt)
+            .with_help_message("format: local_port:dest_host:dest_port (e.g., 8080:localhost:80)")
+            .prompt()?;
+
+        if input.trim().is_empty() {
+            break;
+        }
+
+        // 简单验证格式
+        if validate_forward_format(&input) {
+            rules.push(input.trim().to_string());
+        } else {
+            println!("  Invalid format. Expected: local_port:dest_host:dest_port");
+            println!("  Example: 8080:localhost:80");
+        }
+    }
+
+    if !rules.is_empty() {
+        println!("  Added {} {} rule(s)\n", rules.len(), kind);
+    }
+
+    Ok(rules)
+}
+
+/// 验证 forward 格式: local_port:dest_host:dest_port
+fn validate_forward_format(input: &str) -> bool {
+    let parts: Vec<&str> = input.trim().split(':').collect();
+    if parts.len() != 3 {
+        return false;
+    }
+
+    // 验证 local_port 是数字
+    if parts[0].parse::<u16>().is_err() {
+        return false;
+    }
+
+    // dest_host 不能为空
+    if parts[1].is_empty() {
+        return false;
+    }
+
+    // 验证 dest_port 是数字
+    if parts[2].parse::<u16>().is_err() {
+        return false;
+    }
+
+    true
 }
