@@ -34,11 +34,21 @@ cd "$TMPDIR"
 
 # 使用 GITHUB_TOKEN 下载当前仓库的 release assets
 export GH_TOKEN="${GITHUB_TOKEN:-}"
+echo "Repo: ${REPO}"
+echo "Version: v${VERSION}"
+
+# 检查 release 是否存在
+echo "Checking release..."
+gh release view "v${VERSION}" --repo "${REPO}" 2>&1 || echo "Release view failed"
 
 for platform in macos-arm64 macos-amd64 linux-arm64 linux-amd64; do
+    echo "Downloading ${platform}..."
     gh release download "v${VERSION}" --repo "${REPO}" \
-        --pattern "${BIN}-v${VERSION}-${platform}" --output "${platform}" 2>/dev/null || true
+        --pattern "${BIN}-v${VERSION}-${platform}" --output "${platform}" 2>&1 || echo "Failed to download ${platform}"
 done
+
+echo "Files in TMPDIR after download:"
+ls -la
 
 export MACOS_ARM64=""
 export MACOS_AMD64=""
