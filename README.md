@@ -4,6 +4,8 @@ SSH config manager — a CLI tool for managing `~/.ssh/config`.
 
 **sshm runs fully offline** — it operates only on files under `~/.ssh/` and makes no network requests of any kind.
 
+---
+
 ## Installation
 
 ### Homebrew (macOS / Linux)
@@ -21,25 +23,44 @@ cargo install sshm
 
 ### Pre-built binaries
 
-Download the latest binary for your platform from the [Releases](https://github.com/YewFence/ssh-config-manager/releases) page, then place it somewhere on your `$PATH`.
+Download from [Releases](https://github.com/YewFence/ssh-config-manager/releases).
 
-### Build from source
+---
+
+## Quick Start
 
 ```bash
-cargo install --path .
+# List all hosts
+sshm ls
+
+# Create a host (interactive)
+sshm create myserver
+sshm create myserver --hostname 192.168.1.10 --user root
+
+# Edit a host (interactive)
+sshm edit myserver
+sshm edit myserver --user ubuntu   # directly update single field
+
+# Delete a host
+sshm delete myserver
 ```
 
-## Usage
+---
 
-### List hosts
+## Commands
 
-Hostnames are masked by default (first and last 3 characters kept) to avoid leaking sensitive info:
+### `sshm ls`
+
+List all SSH hosts. Hostnames are masked by default.
 
 ```bash
 sshm ls
+sshm ls --show   # reveal full hostnames
 ```
 
-```
+output:
+
+```bash
 +------------+-----------------+----------+-------+---------------------+------------+
 | NAME       | HOSTNAME        | USER     | PORT  | IDENTITY FILE       | PROXY JUMP |
 +============================================================================+========+
@@ -49,108 +70,108 @@ sshm ls
 +------------+-----------------+----------+-------+---------------------+------------+
 ```
 
-Use `--show` / `-s` to reveal full hostnames:
+### `sshm create [name]`
+
+Create a new host. If flags are provided, prompts are skipped for those fields.
 
 ```bash
-sshm ls --show
-sshm ls -s
-```
-
-Or set `SSHM_SHOW=1` to make it permanent (accepts `1` / `true` / `yes`):
-
-```bash
-export SSHM_SHOW=1
-sshm ls
-```
-
-### Create a host
-
-**Interactive:**
-
-```bash
+# Interactive
 sshm create
-# alias
-sshm c
+sshm create myserver
+
+# Non-interactive (all fields via flags)
+sshm create myserver -H 192.168.1.10 -u root -p 2222 -i ~/.ssh/id_ed25519
 ```
 
-**With flags (skips prompts for provided fields):**
+**Flags:** `-H/--hostname`, `-u/--user`, `-p/--port`, `-i/--identity-file`, `-J/--proxy-jump`, `-d/--description`
+
+### `sshm edit <name>`
+
+Edit an existing host. Flags update fields directly; omitted fields prompt interactively with current values as defaults.
 
 ```bash
-sshm create myserver --hostname example.com --user admin
-sshm create myserver -H example.com -u admin -p 2222
-```
-
-When both `name` and `--hostname` are provided, all prompts are skipped.
-
-**Available flags:**
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--hostname` | `-H` | Hostname or IP address |
-| `--user` | `-u` | SSH username |
-| `--port` | `-p` | Port (default: 22) |
-| `--identity-file` | `-i` | Path to private key |
-| `--proxy-jump` | `-J` | ProxyJump host alias |
-
-**`IdentityFile` accepts three input formats:**
-
-- **Full path** (e.g. `~/.ssh/id_ed25519`) — written as-is
-- **Filename only** (e.g. `id_ed25519`) — expanded to `~/.ssh/id_ed25519`
-- **Public key content** (paste `ssh-ed25519 AAAA...`) — prompts for a filename and saves to `~/.ssh/<name>.pub`
-
-### Edit a host
-
-```bash
+# Interactive edit
 sshm edit myserver
-# alias
-sshm e myserver
+
+# Direct update (no prompts)
+sshm edit myserver --user ubuntu
+sshm edit myserver -H newhost.example.com -p 2222
 ```
 
-Existing values are pre-filled as defaults. Press Enter to keep them unchanged.
+**Flags:** same as `create`
 
-### Delete a host
+### `sshm delete <name>`
+
+Delete a host (prompts for confirmation).
 
 ```bash
 sshm delete myserver
-# alias
-sshm d myserver
 ```
 
-Prompts for confirmation before deleting.
+### `sshm clone <source> [name]`
 
-### Scan for unreferenced key files
+Clone an existing host configuration.
+
+```bash
+sshm clone myserver myserver-backup
+```
+
+### `sshm prune`
+
+List unreferenced key files in `~/.ssh/` (read-only, no files deleted).
 
 ```bash
 sshm prune
 ```
 
-Scans `~/.ssh/` and lists key files not referenced by any host entry. Read-only — no files are modified.
+### `sshm open`
 
-### Open the ~/.ssh directory
+Open `~/.ssh/` in system file manager.
 
 ```bash
-sshm open
+sshm open           # open directory
+sshm open config    # open config in editor
 ```
 
-Opens `~/.ssh/` in the system file manager (Explorer on Windows, Finder on macOS, `xdg-open` on Linux). Prints the path if no GUI is available.
+---
+
+## IdentityFile Input Formats
+
+The `--identity-file` / `-i` flag accepts three formats:
+
+| Format | Example | Result |
+|--------|---------|--------|
+| Full path | `~/.ssh/id_ed25519` | Written as-is |
+| Filename only | `id_ed25519` | Expanded to `~/.ssh/id_ed25519` |
+| Public key content | `ssh-ed25519 AAAA...` | Prompts for filename, saved to `~/.ssh/<name>.pub` |
+
+---
+
+## Full CLI Reference
+
+For complete command-line documentation (all subcommands, flags, and options), see **[CLI_HELP.md](./CLI_HELP.md)**.
+
+This file is auto-generated from source code and always up-to-date.
+
+---
 
 ## Security
 
-sshm is fully offline — it makes no network requests of any kind. All operations are local to your machine.
-
-**File access scope:**
+sshm is fully offline — it makes no network requests of any kind.
 
 | Command | File access |
 |---------|-------------|
 | `ls`, `edit`, `delete`, `clone` | Read `~/.ssh/config` |
 | `create`, `edit` | Read + write `~/.ssh/config` |
-| `create`, `edit` (when public key content is pasted) | Also writes `~/.ssh/<name>.pub` |
-| `prune` | Read `~/.ssh/config`; scans `~/.ssh/` directory listing — read-only, no files are deleted |
-| `open` | Delegates to the system file manager or editor (`$VISUAL` / `$EDITOR`); sshm itself does not read any file contents |
+| `create`, `edit` (public key paste) | Also writes `~/.ssh/<name>.pub` |
+| `prune` | Read-only scan of `~/.ssh/` |
+| `open` | Delegates to system file manager |
 
-sshm never reads private key material. The only time it writes to `~/.ssh/` outside of `config` is when you explicitly paste a public key during `create` or `edit`.
+sshm never reads private key material.
+
+---
 
 ## Notes
 
-- Top-level comments and unrecognized directives (e.g. `ForwardAgent`) in the config file are preserved
+- Top-level comments and unrecognized directives (e.g. `ForwardAgent`) are preserved when editing
 - File permissions are automatically set to `600` after writing on Unix systems
