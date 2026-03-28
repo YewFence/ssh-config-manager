@@ -145,6 +145,7 @@ jobs:
             exit 0
           fi
 
+          chmod +x ./scripts/update-homebrew.sh ./scripts/generate-homebrew-formula.sh
           ./scripts/update-homebrew.sh \
             "$VERSION" \
             "$BIN" \

@@ -1,0 +1,16 @@
+pre-push:
+  commands:
+    check-tag-version:
+      run: |
+        # 只在推送 tag 时检查
+        while read local_ref local_sha remote_ref remote_sha; do
+          if [[ "$local_ref" == refs/tags/v* ]]; then
+            TAG="${local_ref#refs/tags/v}"
+            CARGO_VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+            if [ "$TAG" != "$CARGO_VERSION" ]; then
+              echo "❌ Tag v$TAG 与 Cargo.toml 中的版本 $CARGO_VERSION 不一致，请先同步版本再推送。"
+              exit 1
+            fi
+            echo "✅ Tag v$TAG 与 Cargo.toml 版本一致。"
+          fi
+        done
