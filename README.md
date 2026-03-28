@@ -2,7 +2,7 @@
 
 SSH config manager — a CLI tool for managing `~/.ssh/config`.
 
-**sshm runs fully offline** — it only reads and writes `~/.ssh/config` on your local machine and makes no network requests.
+**sshm runs fully offline** — it operates only on files under `~/.ssh/` and makes no network requests of any kind.
 
 ## Installation
 
@@ -134,8 +134,23 @@ sshm open
 
 Opens `~/.ssh/` in the system file manager (Explorer on Windows, Finder on macOS, `xdg-open` on Linux). Prints the path if no GUI is available.
 
+## Security
+
+sshm is fully offline — it makes no network requests of any kind. All operations are local to your machine.
+
+**File access scope:**
+
+| Command | File access |
+|---------|-------------|
+| `ls`, `edit`, `delete`, `clone` | Read `~/.ssh/config` |
+| `create`, `edit` | Read + write `~/.ssh/config` |
+| `create`, `edit` (when public key content is pasted) | Also writes `~/.ssh/<name>.pub` |
+| `prune` | Read `~/.ssh/config`; scans `~/.ssh/` directory listing — read-only, no files are deleted |
+| `open` | Delegates to the system file manager or editor (`$VISUAL` / `$EDITOR`); sshm itself does not read any file contents |
+
+sshm never reads private key material. The only time it writes to `~/.ssh/` outside of `config` is when you explicitly paste a public key during `create` or `edit`.
+
 ## Notes
 
-- Reads and writes `~/.ssh/config` only — no key material is ever stored or transmitted
 - Top-level comments and unrecognized directives (e.g. `ForwardAgent`) in the config file are preserved
 - File permissions are automatically set to `600` after writing on Unix systems

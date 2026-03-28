@@ -10,6 +10,8 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// List all SSH hosts
+    ///
+    /// Reads ~/.ssh/config. No files are written or modified.
     Ls {
         /// Show full hostnames (default: masked)
         #[arg(long, short)]
@@ -17,6 +19,8 @@ pub enum Commands {
     },
 
     /// Clone an existing SSH host
+    ///
+    /// Reads and writes ~/.ssh/config only. No other files are accessed.
     #[command(alias = "cl")]
     Clone {
         /// Source host alias to clone from
@@ -27,6 +31,9 @@ pub enum Commands {
     },
 
     /// Create a new SSH host
+    ///
+    /// Reads and writes ~/.ssh/config. If public key content is pasted as the identity file,
+    /// it is also written to ~/.ssh/<name>.pub. No network requests are made.
     #[command(alias = "c")]
     Create {
         /// Host alias name (prompted if omitted)
@@ -58,6 +65,9 @@ pub enum Commands {
     },
 
     /// Edit an existing SSH host
+    ///
+    /// Reads and writes ~/.ssh/config. If public key content is pasted as the identity file,
+    /// it is also written to ~/.ssh/<name>.pub. No network requests are made.
     #[command(alias = "e")]
     Edit {
         /// Host alias name to edit
@@ -89,6 +99,8 @@ pub enum Commands {
     },
 
     /// Delete an SSH host
+    ///
+    /// Reads and writes ~/.ssh/config only. Associated key files are not deleted.
     #[command(alias = "d")]
     Delete {
         /// Host alias name to delete
@@ -96,9 +108,15 @@ pub enum Commands {
     },
 
     /// Scan for unused key files in ~/.ssh
+    ///
+    /// Reads ~/.ssh/config and scans the ~/.ssh/ directory listing.
+    /// Read-only — no files are deleted or modified.
     Prune,
 
     /// Open ~/.ssh directory in system file manager
+    ///
+    /// Delegates to the system file manager (Explorer / Finder / xdg-open) or falls back to a
+    /// subshell. sshm itself does not read any file contents.
     Open {
         #[command(subcommand)]
         subcommand: Option<OpenSubcommand>,
