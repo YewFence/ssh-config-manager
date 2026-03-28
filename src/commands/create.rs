@@ -1,7 +1,8 @@
 use crate::config::{self, SshHost};
 use anyhow::Result;
-use inquire::{validator::Validation, Text};
 use std::path::Path;
+
+use super::{prompt_forwards, prompt_identity, prompt_optional, prompt_port, prompt_required};
 
 pub struct CreateFlags {
     pub hostname: Option<String>,
@@ -15,13 +16,7 @@ pub struct CreateFlags {
 pub fn run(name: Option<String>, flags: CreateFlags, config_path: &Path) -> Result<()> {
     let mut config = config::load_config(config_path)?;
 
-    let non_interactive = name.is_some() && flags.hostname.is_some();
-
-    let host = if non_interactive {
-        build_host_from_flags(name.unwrap(), flags)
-    } else {
-        prompt_host(name, flags)?
-    };
+    let host = prompt_host(name, flags, None)?;
 
     if config.contains(&host.alias) {
         anyhow::bail!(
@@ -38,123 +33,69 @@ pub fn run(name: Option<String>, flags: CreateFlags, config_path: &Path) -> Resu
     Ok(())
 }
 
-fn build_host_from_flags(name: String, flags: CreateFlags) -> SshHost {
-    let extra = if flags.identity_file.is_none() {
-        vec![("PreferredAuthentications".to_string(), "password".to_string())]
-    } else {
-        vec![]
-    };
-    SshHost {
-        alias: name,
-        description: flags.description,
-        hostname: flags.hostname,
-        user: flags.user,
-        port: flags.port,
-        identity_file: flags.identity_file,
-        proxy_jump: flags.proxy_jump,
-        extra,
-    }
-}
+/// 构建 SshHost，create/edit 共用。
+///
+/// - `name`：CLI 位置参数（作为 alias 的 flag 等价值）
+/// - `flags`：CLI flags，有值时跳过对应字段的交互
+/// - `preset`：edit 时传入原始主机，用于预填默认值并保留 extra 中的非 forward 指令
+pub fn prompt_host(
+    name: Option<String>,
+    flags: CreateFlags,
+    preset: Option<&SshHost>,
+) -> Result<SshHost> {
+    let preset_alias = preset.map(|h| h.alias.as_str()).unwrap_or("");
+    let name_flag = name.or_else(|| {
+        if preset_alias.is_empty() {
+            None
+        } else {
+            Some(preset_alias.to_string())
+        }
+    });
 
-pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> {
-    let default_alias = name.as_deref().unwrap_or("").to_string();
-    let alias = Text::new("Host alias:")
-        .with_default(&default_alias)
-        .with_validator(|s: &str| {
-            if s.is_empty() {
-                Ok(Validation::Invalid("Alias cannot be empty.".into()))
-            } else {
-                Ok(Validation::Valid)
-            }
-        })
-        .prompt()?;
+    let alias = prompt_required(
+        "Host alias:",
+        // edit 时 name 已经确定，直接当 flag 传入跳过提示
+        name_flag,
+        "",
+    )?;
 
-    let default_desc = flags.description.as_deref().unwrap_or("").to_string();
-    let desc_input = Text::new("Description (leave blank to skip):")
-        .with_default(&default_desc)
-        .prompt()?;
-    let description = if desc_input.is_empty() {
-        None
-    } else {
-        Some(desc_input)
-    };
+    let preset_desc = preset
+        .and_then(|h| h.description.as_deref())
+        .unwrap_or("");
+    let description = prompt_optional("Description (leave blank to skip):", flags.description, preset_desc, None)?;
 
-    let default_hostname = flags.hostname.as_deref().unwrap_or("").to_string();
-    let hostname = Text::new("HostName (IP or domain):")
-        .with_default(&default_hostname)
-        .with_validator(|s: &str| {
-            if s.is_empty() {
-                Ok(Validation::Invalid("HostName is required.".into()))
-            } else {
-                Ok(Validation::Valid)
-            }
-        })
-        .prompt()?;
+    let preset_hostname = preset
+        .and_then(|h| h.hostname.as_deref())
+        .unwrap_or("");
+    let hostname = prompt_required("HostName (IP or domain):", flags.hostname, preset_hostname)?;
 
-    let default_user = flags.user.as_deref().unwrap_or("").to_string();
-    let user_input = Text::new("User (leave blank to skip):")
-        .with_default(&default_user)
-        .prompt()?;
-    let user = if user_input.is_empty() {
-        None
-    } else {
-        Some(user_input)
-    };
+    let preset_user = preset.and_then(|h| h.user.as_deref()).unwrap_or("");
+    let user = prompt_optional("User (leave blank to skip):", flags.user, preset_user, None)?;
 
-    let default_port = flags
-        .port
-        .map(|p| p.to_string())
-        .unwrap_or_else(|| "22".to_string());
-    let port_input = Text::new("Port:")
-        .with_default(&default_port)
-        .with_validator(|s: &str| {
-            if s.is_empty() || s.parse::<u16>().is_ok() {
-                Ok(Validation::Valid)
-            } else {
-                Ok(Validation::Invalid(
-                    "Port must be a number between 1 and 65535.".into(),
-                ))
-            }
-        })
-        .prompt()?;
-    let port = port_input.parse::<u16>().ok();
+    let preset_port = preset.and_then(|h| h.port);
+    let port = prompt_port(flags.port, preset_port)?;
 
-    let default_identity = flags.identity_file.as_deref().unwrap_or("").to_string();
-    let identity_input = Text::new("IdentityFile (path, filename, or paste public key):")
-        .with_default(&default_identity)
-        .with_help_message(
-            "filename → auto-prefix ~/.ssh/ | pubkey content → saved to ~/.ssh/<name>.pub",
-        )
-        .prompt()?;
-    let identity_file = super::resolve_identity_file(&identity_input, &alias)?;
+    let preset_identity = preset
+        .and_then(|h| h.identity_file.as_deref())
+        .unwrap_or("");
+    let identity_file = prompt_identity(&alias, flags.identity_file, preset_identity)?;
 
-    let default_proxy = flags.proxy_jump.as_deref().unwrap_or("").to_string();
-    let proxy_input = Text::new("ProxyJump (host alias, leave blank to skip):")
-        .with_default(&default_proxy)
-        .prompt()?;
-    let proxy_jump = if proxy_input.is_empty() {
-        None
-    } else {
-        Some(proxy_input)
-    };
+    let preset_proxy = preset
+        .and_then(|h| h.proxy_jump.as_deref())
+        .unwrap_or("");
+    let proxy_jump = prompt_optional(
+        "ProxyJump (host alias, leave blank to skip):",
+        flags.proxy_jump,
+        preset_proxy,
+        None,
+    )?;
 
-    // 收集 forward 规则
-    let local_forwards = collect_forwards("LocalForward")?;
-    let remote_forwards = collect_forwards("RemoteForward")?;
+    let preset_local = forwards_from_extra(preset, "LocalForward");
+    let preset_remote = forwards_from_extra(preset, "RemoteForward");
+    let local_fwds = prompt_forwards("LocalForward", &preset_local)?;
+    let remote_fwds = prompt_forwards("RemoteForward", &preset_remote)?;
 
-    let mut extra = if identity_file.is_none() {
-        vec![("PreferredAuthentications".to_string(), "password".to_string())]
-    } else {
-        vec![]
-    };
-
-    // 添加 forward 规则到 extra
-    for rule in local_forwards {
-        extra.push(("LocalForward".to_string(), rule));
-    }
-    for rule in remote_forwards {
-        extra.push(("RemoteForward".to_string(), rule));
-    }
+    let extra = build_extra(&identity_file, &local_fwds, &remote_fwds, preset);
 
     Ok(SshHost {
         alias,
@@ -168,62 +109,50 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
     })
 }
 
-/// 循环收集 forward 规则，直到用户输入空行为止
-/// 格式: local_port:dest_host:dest_port
-fn collect_forwards(kind: &str) -> Result<Vec<String>> {
-    let mut rules = Vec::new();
-
-    println!("\nAdd {} rules (format: local_port:dest_host:dest_port)", kind);
-    println!("Example: 8080:localhost:80  →  forwards local port 8080 to remote localhost:80");
-    println!("Leave blank and press Enter to skip/continue.\n");
-
-    loop {
-        let prompt = format!("{} [{}]:", kind, rules.len() + 1);
-        let input = Text::new(&prompt)
-            .with_help_message("format: local_port:dest_host:dest_port (e.g., 8080:localhost:80)")
-            .prompt()?;
-
-        if input.trim().is_empty() {
-            break;
-        }
-
-        // 简单验证格式
-        if validate_forward_format(&input) {
-            rules.push(input.trim().to_string());
-        } else {
-            println!("  Invalid format. Expected: local_port:dest_host:dest_port");
-            println!("  Example: 8080:localhost:80");
-        }
-    }
-
-    if !rules.is_empty() {
-        println!("  Added {} {} rule(s)\n", rules.len(), kind);
-    }
-
-    Ok(rules)
+/// 从 extra 中按 key 筛出已有的 forward 规则值
+fn forwards_from_extra(preset: Option<&SshHost>, key: &str) -> Vec<String> {
+    preset
+        .map(|h| {
+            h.extra
+                .iter()
+                .filter(|(k, _)| k.eq_ignore_ascii_case(key))
+                .map(|(_, v)| v.clone())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
-/// 验证 forward 格式: local_port:dest_host:dest_port
-fn validate_forward_format(input: &str) -> bool {
-    let parts: Vec<&str> = input.trim().split(':').collect();
-    if parts.len() != 3 {
-        return false;
+/// 构建 extra：PreferredAuthentications + forward 规则 + 保留其他 extra 项
+fn build_extra(
+    identity_file: &Option<String>,
+    local_fwds: &[String],
+    remote_fwds: &[String],
+    preset: Option<&SshHost>,
+) -> Vec<(String, String)> {
+    let mut extra = Vec::new();
+
+    if identity_file.is_none() {
+        extra.push(("PreferredAuthentications".to_string(), "password".to_string()));
     }
 
-    // 验证 local_port 是数字
-    if parts[0].parse::<u16>().is_err() {
-        return false;
+    // 保留 preset 中非 forward 的 extra 项（如 ForwardAgent、StrictHostKeyChecking 等）
+    if let Some(h) = preset {
+        for (k, v) in &h.extra {
+            if !k.eq_ignore_ascii_case("LocalForward")
+                && !k.eq_ignore_ascii_case("RemoteForward")
+                && !k.eq_ignore_ascii_case("PreferredAuthentications")
+            {
+                extra.push((k.clone(), v.clone()));
+            }
+        }
     }
 
-    // dest_host 不能为空
-    if parts[1].is_empty() {
-        return false;
+    for rule in local_fwds {
+        extra.push(("LocalForward".to_string(), rule.clone()));
+    }
+    for rule in remote_fwds {
+        extra.push(("RemoteForward".to_string(), rule.clone()));
     }
 
-    // 验证 dest_port 是数字
-    if parts[2].parse::<u16>().is_err() {
-        return false;
-    }
-
-    true
+    extra
 }

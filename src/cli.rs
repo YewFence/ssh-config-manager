@@ -62,6 +62,30 @@ pub enum Commands {
     Edit {
         /// Host alias name to edit
         name: String,
+
+        /// HostName or IP address
+        #[arg(long, short = 'H')]
+        hostname: Option<String>,
+
+        /// SSH user
+        #[arg(long, short)]
+        user: Option<String>,
+
+        /// SSH port
+        #[arg(long, short)]
+        port: Option<u16>,
+
+        /// Path to identity file
+        #[arg(long, short = 'i')]
+        identity_file: Option<String>,
+
+        /// ProxyJump host
+        #[arg(long, short = 'J')]
+        proxy_jump: Option<String>,
+
+        /// Host description (written as a comment in config)
+        #[arg(long, short = 'd')]
+        description: Option<String>,
     },
 
     /// Delete an SSH host
