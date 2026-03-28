@@ -32,6 +32,9 @@ trap "rm -rf $TMPDIR" EXIT
 
 cd "$TMPDIR"
 
+# 使用 GITHUB_TOKEN 下载当前仓库的 release assets
+export GH_TOKEN="${GITHUB_TOKEN:-}"
+
 for platform in macos-arm64 macos-amd64 linux-arm64 linux-amd64; do
     gh release download "v${VERSION}" --repo "${REPO}" \
         --pattern "${BIN}-v${VERSION}-${platform}" --output "${platform}" 2>/dev/null || true
@@ -53,6 +56,12 @@ done
 
 cd - > /dev/null
 
+# 检查是否至少有一个平台下载成功
+if [ -z "$MACOS_ARM64" ] && [ -z "$MACOS_AMD64" ] && [ -z "$LINUX_ARM64" ] && [ -z "$LINUX_AMD64" ]; then
+    echo "Error: No release assets downloaded. Check GITHUB_TOKEN permissions." >&2
+    exit 1
+fi
+
 # Step 2: 生成主 formula（CLASS_NAME，用于 brew install sshm）
 echo "Generating main formula (${MAIN_FORMULA_PATH})..."
 "${SCRIPT_DIR}/generate-homebrew-formula.sh" "$VERSION" "$BIN" "$REPO" "$CLASS_NAME" "$DESC" > "$TMPDIR/main.rb"
@@ -65,6 +74,14 @@ echo "--- Main formula ---"
 cat "$TMPDIR/main.rb"
 echo "--- Versioned formula ---"
 cat "$TMPDIR/versioned.rb"
+
+# 切换到 HOMEBREW_TAP_TOKEN 用于上传 formula 到 tap 仓库
+export GH_TOKEN="${HOMEBREW_TAP_TOKEN:-}"
+
+if [ -z "$GH_TOKEN" ]; then
+    echo "Error: HOMEBREW_TAP_TOKEN not set" >&2
+    exit 1
+fi
 
 # 通用上传函数
 upload_formula() {
