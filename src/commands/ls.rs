@@ -34,6 +34,7 @@ pub fn run(config_path: &Path, show: bool) -> Result<()> {
     let mut table = Table::new();
     table.set_header(vec![
         Cell::new("NAME").add_attribute(Attribute::Bold),
+        Cell::new("DESCRIPTION").add_attribute(Attribute::Bold),
         Cell::new("HOSTNAME").add_attribute(Attribute::Bold),
         Cell::new("USER").add_attribute(Attribute::Bold),
         Cell::new("PORT").add_attribute(Attribute::Bold),
@@ -52,6 +53,7 @@ pub fn run(config_path: &Path, show: bool) -> Result<()> {
     for host in &config.hosts {
         table.add_row(vec![
             Cell::new(&host.alias).fg(Color::Cyan),
+            Cell::new(host.description.as_deref().unwrap_or("-")),
             Cell::new(display(host.hostname.as_deref())),
             Cell::new(host.user.as_deref().unwrap_or("-")),
             Cell::new(host.port.map(|p| p.to_string()).as_deref().unwrap_or("22")),

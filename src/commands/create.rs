@@ -9,6 +9,7 @@ pub struct CreateFlags {
     pub port: Option<u16>,
     pub identity_file: Option<String>,
     pub proxy_jump: Option<String>,
+    pub description: Option<String>,
 }
 
 pub fn run(name: Option<String>, flags: CreateFlags, config_path: &Path) -> Result<()> {
@@ -45,6 +46,7 @@ fn build_host_from_flags(name: String, flags: CreateFlags) -> SshHost {
     };
     SshHost {
         alias: name,
+        description: flags.description,
         hostname: flags.hostname,
         user: flags.user,
         port: flags.port,
@@ -66,6 +68,16 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
             }
         })
         .prompt()?;
+
+    let default_desc = flags.description.as_deref().unwrap_or("").to_string();
+    let desc_input = Text::new("Description (leave blank to skip):")
+        .with_default(&default_desc)
+        .prompt()?;
+    let description = if desc_input.is_empty() {
+        None
+    } else {
+        Some(desc_input)
+    };
 
     let default_hostname = flags.hostname.as_deref().unwrap_or("").to_string();
     let hostname = Text::new("HostName (IP or domain):")
@@ -146,6 +158,7 @@ pub fn prompt_host(name: Option<String>, flags: CreateFlags) -> Result<SshHost> 
 
     Ok(SshHost {
         alias,
+        description,
         hostname: Some(hostname),
         user,
         port,

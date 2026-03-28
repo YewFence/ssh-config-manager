@@ -17,6 +17,7 @@ pub fn run(name: &str, config_path: &Path) -> Result<()> {
         port: original.port,
         identity_file: original.identity_file.clone(),
         proxy_jump: original.proxy_jump.clone(),
+        description: original.description.clone(),
     };
 
     let mut updated = prompt_host(Some(original.alias.clone()), flags)?;

@@ -13,6 +13,11 @@ pub fn serialize(config: &SshConfig) -> String {
     }
 
     for host in &config.hosts {
+        if let Some(ref desc) = host.description {
+            for line in desc.lines() {
+                out.push_str(&format!("# {}\n", line));
+            }
+        }
         out.push_str(&format!("Host {}\n", host.alias));
         if let Some(ref v) = host.hostname {
             out.push_str(&format!("    HostName {}\n", v));

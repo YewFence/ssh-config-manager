@@ -5,13 +5,26 @@ pub fn parse(content: &str) -> SshConfig {
     let mut current: Option<SshHost> = None;
     let mut header: Vec<String> = Vec::new();
     let mut past_first_host = false;
+    // 收集紧邻下一个 Host 行前的注释（空行会重置）
+    let mut pending_comments: Vec<String> = Vec::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
 
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        if trimmed.is_empty() {
             if !past_first_host {
                 header.push(line.to_string());
+            } else {
+                pending_comments.clear();
+            }
+            continue;
+        }
+
+        if trimmed.starts_with('#') {
+            if !past_first_host {
+                header.push(line.to_string());
+            } else {
+                pending_comments.push(trimmed[1..].trim().to_string());
             }
             continue;
         }
@@ -23,7 +36,12 @@ pub fn parse(content: &str) -> SshConfig {
             if let Some(h) = current.take() {
                 hosts.push(h);
             }
-            current = Some(SshHost::new(value.to_string()));
+            let mut host = SshHost::new(value.to_string());
+            if !pending_comments.is_empty() {
+                host.description = Some(pending_comments.join("\n"));
+            }
+            pending_comments.clear();
+            current = Some(host);
         } else if let Some(ref mut h) = current {
             h.apply_directive(key, value);
         }

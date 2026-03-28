@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, Default)]
 pub struct SshHost {
     pub alias: String,
+    pub description: Option<String>,
     pub hostname: Option<String>,
     pub user: Option<String>,
     pub port: Option<u16>,

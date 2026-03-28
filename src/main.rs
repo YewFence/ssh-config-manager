@@ -20,6 +20,7 @@ fn main() -> Result<()> {
             port,
             identity_file,
             proxy_jump,
+            description,
         } => commands::create::run(
             name,
             commands::create::CreateFlags {
@@ -28,6 +29,7 @@ fn main() -> Result<()> {
                 port,
                 identity_file,
                 proxy_jump,
+                description,
             },
             &config_path,
         ),

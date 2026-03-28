@@ -51,6 +51,10 @@ pub enum Commands {
         /// ProxyJump host
         #[arg(long, short = 'J')]
         proxy_jump: Option<String>,
+
+        /// Host description (written as a comment in config)
+        #[arg(long, short = 'd')]
+        description: Option<String>,
     },
 
     /// Edit an existing SSH host
