@@ -1,18 +1,39 @@
 # sshm
 
-SSH config manager — 用于管理 `~/.ssh/config` 的命令行工具。
+SSH config manager — a CLI tool for managing `~/.ssh/config`.
 
-## 安装
+**sshm runs fully offline** — it only reads and writes `~/.ssh/config` on your local machine and makes no network requests.
+
+## Installation
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap YewFence/tap
+brew install sshm
+```
+
+### cargo
+
+```bash
+cargo install sshm
+```
+
+### Pre-built binaries
+
+Download the latest binary for your platform from the [Releases](https://github.com/YewFence/ssh-config-manager/releases) page, then place it somewhere on your `$PATH`.
+
+### Build from source
 
 ```bash
 cargo install --path .
 ```
 
-## 用法
+## Usage
 
-### 列出所有 host
+### List hosts
 
-默认遮罩主机名（保留前后各 3 个字符），防止敏感信息泄露：
+Hostnames are masked by default (first and last 3 characters kept) to avoid leaking sensitive info:
 
 ```bash
 sshm ls
@@ -28,93 +49,93 @@ sshm ls
 +------------+-----------------+----------+-------+---------------------+------------+
 ```
 
-使用 `--show` / `-s` 显示完整主机名：
+Use `--show` / `-s` to reveal full hostnames:
 
 ```bash
 sshm ls --show
 sshm ls -s
 ```
 
-也可以通过环境变量 `SSHM_SHOW=1` 永久开启（支持 `1` / `true` / `yes`）：
+Or set `SSHM_SHOW=1` to make it permanent (accepts `1` / `true` / `yes`):
 
 ```bash
 export SSHM_SHOW=1
 sshm ls
 ```
 
-### 创建 host
+### Create a host
 
-**交互式：**
+**Interactive:**
 
 ```bash
 sshm create
-# 或简写
+# alias
 sshm c
 ```
 
-**带参数（可省略部分交互）：**
+**With flags (skips prompts for provided fields):**
 
 ```bash
 sshm create myserver --hostname example.com --user admin
 sshm create myserver -H example.com -u admin -p 2222
 ```
 
-当 `name` 和 `--hostname` 同时提供时完全跳过交互。
+When both `name` and `--hostname` are provided, all prompts are skipped.
 
-**可用参数：**
+**Available flags:**
 
-| 参数 | 简写 | 说明 |
-|------|------|------|
-| `--hostname` | `-H` | 主机名或 IP |
-| `--user` | `-u` | SSH 用户名 |
-| `--port` | `-p` | 端口（默认 22）|
-| `--identity-file` | `-i` | 密钥文件路径 |
-| `--proxy-jump` | `-J` | 跳板机 host 别名 |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--hostname` | `-H` | Hostname or IP address |
+| `--user` | `-u` | SSH username |
+| `--port` | `-p` | Port (default: 22) |
+| `--identity-file` | `-i` | Path to private key |
+| `--proxy-jump` | `-J` | ProxyJump host alias |
 
-**IdentityFile 字段支持三种输入方式：**
+**`IdentityFile` accepts three input formats:**
 
-- **完整路径**（如 `~/.ssh/id_ed25519`）→ 原样写入
-- **纯文件名**（如 `id_ed25519`）→ 自动补全为 `~/.ssh/id_ed25519`
-- **公钥内容**（粘贴 `ssh-ed25519 AAAA...`）→ 询问文件名，保存到 `~/.ssh/<name>.pub`
+- **Full path** (e.g. `~/.ssh/id_ed25519`) — written as-is
+- **Filename only** (e.g. `id_ed25519`) — expanded to `~/.ssh/id_ed25519`
+- **Public key content** (paste `ssh-ed25519 AAAA...`) — prompts for a filename and saves to `~/.ssh/<name>.pub`
 
-### 编辑 host
+### Edit a host
 
 ```bash
 sshm edit myserver
-# 或简写
+# alias
 sshm e myserver
 ```
 
-现有字段会作为默认值预填，直接回车保持不变。
+Existing values are pre-filled as defaults. Press Enter to keep them unchanged.
 
-### 删除 host
+### Delete a host
 
 ```bash
 sshm delete myserver
-# 或简写
+# alias
 sshm d myserver
 ```
 
-会在删除前要求确认。
+Prompts for confirmation before deleting.
 
-### 扫描未引用的密钥文件
+### Scan for unreferenced key files
 
 ```bash
 sshm prune
 ```
 
-扫描 `~/.ssh/` 目录，列出未被任何 Host 配置引用的密钥文件。只读不修改，方便手动清理。
+Scans `~/.ssh/` and lists key files not referenced by any host entry. Read-only — no files are modified.
 
-### 打开 ~/.ssh 目录
+### Open the ~/.ssh directory
 
 ```bash
 sshm open
 ```
 
-用系统默认文件管理器打开 `~/.ssh/` 目录（Windows: Explorer, macOS: Finder, Linux: xdg-open）。无图形环境时会打印路径。
+Opens `~/.ssh/` in the system file manager (Explorer on Windows, Finder on macOS, `xdg-open` on Linux). Prints the path if no GUI is available.
 
-## 说明
+## Notes
 
-- 读写 `~/.ssh/config`，不存储任何密钥内容
-- 文件中手写的注释（顶部）和未识别的指令（如 `ForwardAgent`）会被保留
-- Unix 系统下写入后自动设置文件权限为 `600`
+- Reads and writes `~/.ssh/config` only — no key material is ever stored or transmitted
+- Top-level comments and unrecognized directives (e.g. `ForwardAgent`) in the config file are preserved
+- File permissions are automatically set to `600` after writing on Unix systems
