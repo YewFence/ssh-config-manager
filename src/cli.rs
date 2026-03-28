@@ -16,6 +16,16 @@ pub enum Commands {
         show: bool,
     },
 
+    /// Clone an existing SSH host
+    #[command(alias = "cl")]
+    Clone {
+        /// Source host alias to clone from
+        source: String,
+
+        /// New host alias name (prompted if omitted)
+        name: Option<String>,
+    },
+
     /// Create a new SSH host
     #[command(alias = "c")]
     Create {

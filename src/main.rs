@@ -11,6 +11,7 @@ fn main() -> Result<()> {
     let config_path = config::ssh_config_path()?;
 
     match cli.command {
+        Commands::Clone { source, name } => commands::clone::run(&source, name, &config_path),
         Commands::Ls { show } => commands::ls::run(&config_path, show),
         Commands::Create {
             name,
