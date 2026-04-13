@@ -25,7 +25,7 @@ VERSIONED_CLASS="${CLASS_NAME}AT${VERSIONED_VERSION_SUFFIX}"
 MAIN_FORMULA_PATH="Formula/${BIN}.rb"
 VERSIONED_FORMULA_PATH="Formula/${BIN}@${VERSION}.rb"
 
-# Step 1: 下载并计算 SHA256
+# Step 1: 下载并计算 release zip 的 SHA256
 echo "Downloading release assets..."
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
@@ -44,7 +44,7 @@ gh release view "v${VERSION}" --repo "${REPO}" 2>&1 || echo "Release view failed
 for platform in macos-arm64 macos-amd64 linux-arm64 linux-amd64; do
     echo "Downloading ${platform}..."
     gh release download "v${VERSION}" --repo "${REPO}" \
-        --pattern "${BIN}-v${VERSION}-${platform}" --output "${platform}" 2>&1 || echo "Failed to download ${platform}"
+        --pattern "${BIN}-v${VERSION}-${platform}.zip" --output "${platform}.zip" 2>&1 || echo "Failed to download ${platform}"
 done
 
 echo "Files in TMPDIR after download:"
@@ -56,8 +56,9 @@ export LINUX_ARM64=""
 export LINUX_AMD64=""
 
 for platform in macos-arm64 macos-amd64 linux-arm64 linux-amd64; do
-    if [ -f "$platform" ]; then
-        sha=$(sha256sum "$platform" | cut -d' ' -f1)
+    archive="${platform}.zip"
+    if [ -f "$archive" ]; then
+        sha=$(sha256sum "$archive" | cut -d' ' -f1)
         varname=$(echo "$platform" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
         export "$varname=$sha"
         echo "Found $platform: $sha"

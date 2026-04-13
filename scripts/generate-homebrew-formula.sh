@@ -44,11 +44,11 @@ if [ -n "$MACOS_ARM64" ] || [ -n "$MACOS_AMD64" ]; then
     if [ -n "$MACOS_ARM64" ]; then
         cat <<EOF
     on_arm do
-      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-macos-arm64"
+      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-macos-arm64.zip"
       sha256 "${MACOS_ARM64}"
 
       define_method(:install) do
-        bin.install "${BIN}-v#{version}-macos-arm64" => "${BIN}"
+        bin.install "${BIN}"
       end
     end
 EOF
@@ -57,11 +57,11 @@ EOF
     if [ -n "$MACOS_AMD64" ]; then
         cat <<EOF
     on_intel do
-      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-macos-amd64"
+      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-macos-amd64.zip"
       sha256 "${MACOS_AMD64}"
 
       define_method(:install) do
-        bin.install "${BIN}-v#{version}-macos-amd64" => "${BIN}"
+        bin.install "${BIN}"
       end
     end
 EOF
@@ -81,11 +81,11 @@ if [ -n "$LINUX_ARM64" ] || [ -n "$LINUX_AMD64" ]; then
     if [ -n "$LINUX_ARM64" ]; then
         cat <<EOF
     on_arm do
-      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-linux-arm64"
+      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-linux-arm64.zip"
       sha256 "${LINUX_ARM64}"
 
       define_method(:install) do
-        bin.install "${BIN}-v#{version}-linux-arm64" => "${BIN}"
+        bin.install "${BIN}"
       end
     end
 EOF
@@ -94,11 +94,11 @@ EOF
     if [ -n "$LINUX_AMD64" ]; then
         cat <<EOF
     on_intel do
-      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-linux-amd64"
+      url "https://github.com/${REPO}/releases/download/v#{version}/${BIN}-v#{version}-linux-amd64.zip"
       sha256 "${LINUX_AMD64}"
 
       define_method(:install) do
-        bin.install "${BIN}-v#{version}-linux-amd64" => "${BIN}"
+        bin.install "${BIN}"
       end
     end
 EOF

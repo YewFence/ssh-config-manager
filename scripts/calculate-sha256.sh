@@ -20,17 +20,18 @@ trap "rm -rf $TMPDIR" EXIT
 
 cd "$TMPDIR"
 
-# 下载各平台二进制文件
+# 下载各平台 release zip
 for platform in macos-arm64 macos-amd64 linux-arm64 linux-amd64; do
     gh release download "v${VERSION}" --repo "${REPO}" \
-        --pattern "${BIN}-v${VERSION}-${platform}" --output "${platform}" 2>/dev/null || true
+        --pattern "${BIN}-v${VERSION}-${platform}.zip" --output "${platform}.zip" 2>/dev/null || true
 done
 
 # 输出 SHA256 值
 {
     for platform in macos-arm64 macos-amd64 linux-arm64 linux-amd64; do
-        if [ -f "$platform" ]; then
-            sha=$(sha256sum "$platform" | cut -d' ' -f1)
+        archive="${platform}.zip"
+        if [ -f "$archive" ]; then
+            sha=$(sha256sum "$archive" | cut -d' ' -f1)
             # 输出格式: PLATFORM_NAME=sha256_value
             echo "${platform//-/_}=${sha}"
         fi

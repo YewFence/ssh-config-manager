@@ -72,35 +72,43 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }} --locked --verbose
 
-      - name: Determine binary name
-        id: bin
-        shell: bash
-        run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            echo "name=${{ env.BIN_NAME }}.exe" >> $GITHUB_OUTPUT
-            echo "ext=.exe" >> $GITHUB_OUTPUT
-          else
-            echo "name=${{ env.BIN_NAME }}" >> $GITHUB_OUTPUT
-            echo "ext=" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Strip binary (Linux/macOS)
-        if: matrix.os != 'windows-latest'
-        run: strip target/${{ matrix.target }}/release/${{ steps.bin.outputs.name }}
-
-      - name: Prepare release binary
+      - name: Determine artifact names
+        id: names
         shell: bash
         run: |
           VERSION=${{ needs.create-release.outputs.version }}
-          SRC="target/${{ matrix.target }}/release/${{ steps.bin.outputs.name }}"
-          DEST="${{ env.BIN_NAME }}-v${VERSION}-${{ matrix.platform }}${{ steps.bin.outputs.ext }}"
-          cp "$SRC" "$DEST"
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "binary=${{ env.BIN_NAME }}.exe" >> $GITHUB_OUTPUT
+          else
+            echo "binary=${{ env.BIN_NAME }}" >> $GITHUB_OUTPUT
+          fi
+          echo "archive=${{ env.BIN_NAME }}-v${VERSION}-${{ matrix.platform }}.zip" >> $GITHUB_OUTPUT
+
+      - name: Strip binary (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: strip target/${{ matrix.target }}/release/${{ steps.names.outputs.binary }}
+
+      - name: Create release archive (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          SRC="target/${{ matrix.target }}/release/${{ steps.names.outputs.binary }}"
+          DEST="${{ steps.names.outputs.archive }}"
+          zip -j "$DEST" "$SRC"
+
+      - name: Create release archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $src = "target/${{ matrix.target }}/release/${{ steps.names.outputs.binary }}"
+          $dest = "${{ steps.names.outputs.archive }}"
+          Compress-Archive -Path $src -DestinationPath $dest -Force
 
       - name: Upload binary to release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          files: ${{ env.BIN_NAME }}-v${{ needs.create-release.outputs.version }}-${{ matrix.platform }}${{ steps.bin.outputs.ext }}
+          files: ${{ steps.names.outputs.archive }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
