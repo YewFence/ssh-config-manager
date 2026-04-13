@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Pre-release version (without leading v, for example 0.0.6-rc.1)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,19 +23,51 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.get_version.outputs.version }}
+      version: ${{ steps.meta.outputs.version }}
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      draft: ${{ steps.meta.outputs.draft }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      publish_downstream: ${{ steps.meta.outputs.publish_downstream }}
+      release_name: ${{ steps.meta.outputs.release_name }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get version from tag
-        id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Determine release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+            if [[ "$VERSION" == v* ]]; then
+              echo "Manual version input must not start with 'v': $VERSION" >&2
+              exit 1
+            fi
+            TAG_NAME="v${VERSION}"
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "publish_downstream=false" >> $GITHUB_OUTPUT
+            echo "release_name=Pre-release ${VERSION}" >> $GITHUB_OUTPUT
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+            echo "draft=true" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "publish_downstream=true" >> $GITHUB_OUTPUT
+            echo "release_name=Release ${VERSION}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          name: Release ${{ steps.get_version.outputs.version }}
-          draft: true
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.release_name }}
+          draft: ${{ steps.meta.outputs.draft }}
+          prerelease: ${{ steps.meta.outputs.prerelease }}
           generate_release_notes: true
 
   build:
@@ -107,14 +145,17 @@ jobs:
       - name: Upload binary to release
         uses: softprops/action-gh-release@v1
         with:
-          draft: true
+          tag_name: ${{ needs.create-release.outputs.tag_name }}
+          draft: ${{ needs.create-release.outputs.draft }}
+          prerelease: ${{ needs.create-release.outputs.prerelease }}
           files: ${{ steps.names.outputs.archive }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-crates:
     name: Publish to crates.io
-    needs: build
+    if: needs.create-release.outputs.publish_downstream == 'true'
+    needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -131,6 +172,7 @@ jobs:
 
   update-homebrew:
     name: Update Homebrew Tap
+    if: needs.create-release.outputs.publish_downstream == 'true'
     needs: [create-release, build]
     runs-on: ubuntu-latest
     env:
@@ -166,6 +208,7 @@ jobs:
 
   publish-release:
     name: Publish Release
+    if: needs.create-release.outputs.publish_downstream == 'true'
     needs: [create-release, build, publish-crates, update-homebrew]
     runs-on: ubuntu-latest
     steps:
@@ -177,7 +220,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
-            const draft = releases.find(r => r.tag_name === context.ref.replace('refs/tags/', ''));
+            const draft = releases.find(r => r.tag_name === '${{ needs.create-release.outputs.tag_name }}');
             if (!draft) {
               core.setFailed('Draft release not found');
               return;
