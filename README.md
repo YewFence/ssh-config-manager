@@ -8,6 +8,12 @@ SSH config manager — a CLI tool for managing `~/.ssh/config`.
 
 ## Installation
 
+### Mise
+
+```bash
+mise use -g github:YewFence/ssh-config-managers
+```
+
 ### Homebrew (macOS / Linux)
 
 ```bash
@@ -43,6 +49,12 @@ sshm edit myserver --user ubuntu   # directly update single field
 
 # Delete a host
 sshm delete myserver
+
+# Export a backup archive
+sshm export
+
+# Import a backup archive
+sshm import ./sshm-backup-20260415-120000.zip
 ```
 
 ---
@@ -116,6 +128,26 @@ Clone an existing host configuration.
 sshm clone myserver myserver-backup
 ```
 
+### `sshm export [output]`
+
+Export `~/.ssh/config` and all top-level `~/.ssh/*.pub` files into a local `.zip` archive.
+
+```bash
+sshm export
+sshm export ./backups/sshm-backup.zip
+```
+
+By default, sshm writes `./sshm-backup-YYYYMMDD-HHMMSS.zip`.
+
+### `sshm import <archive>`
+
+Import a previously exported backup archive. Existing `config` and matching `.pub` files are backed up first to `~/.ssh/sshm-import-backup-<timestamp>/`.
+
+```bash
+sshm import ./sshm-backup.zip
+sshm import ./sshm-backup.zip --yes
+```
+
 ### `sshm prune`
 
 List unreferenced key files in `~/.ssh/` (read-only, no files deleted).
@@ -132,6 +164,32 @@ Open `~/.ssh/` in system file manager.
 sshm open           # open directory
 sshm open config    # open config in editor
 ```
+
+---
+
+## Backup / Restore
+
+`sshm export` is designed for migration and offline backup, not sync.
+
+- Includes: `~/.ssh/config` and all top-level `~/.ssh/*.pub`
+- Excludes: private keys, `known_hosts`, `authorized_keys`, nested directories, and any cloud sync behavior
+- Import behavior: validate archive, prompt for confirmation, back up files that will be overwritten, then restore `config` and matching `.pub`
+
+If you want to store archives remotely, prefer encryption outside `sshm`.
+
+```bash
+# Plain remote copy
+rclone copy ./sshm-backup.zip remote:/sshm
+
+# Recommended: copy to an rclone crypt remote
+rclone copy ./sshm-backup.zip secure-remote:/sshm
+
+# Restore from remote
+rclone copy remote:/sshm ./backups
+sshm import ./backups/sshm-backup.zip
+```
+
+This keeps `sshm` simple and offline, while still allowing encrypted storage via `rclone crypt`, `age`, or `gpg`.
 
 ---
 
@@ -161,13 +219,16 @@ sshm is fully offline — it makes no network requests of any kind.
 
 | Command | File access |
 |---------|-------------|
-| `ls`, `edit`, `delete`, `clone` | Read `~/.ssh/config` |
+| `ls`, `clone` | Read `~/.ssh/config` |
+| `export` | Read `~/.ssh/config` and top-level `~/.ssh/*.pub`, then write a local `.zip` |
+| `import` | Read a local `.zip`, then write `~/.ssh/config` and matching top-level `~/.ssh/*.pub` |
 | `create`, `edit` | Read + write `~/.ssh/config` |
+| `delete` | Read + write `~/.ssh/config` |
 | `create`, `edit` (public key paste) | Also writes `~/.ssh/<name>.pub` |
 | `prune` | Read-only scan of `~/.ssh/` |
 | `open` | Delegates to system file manager |
 
-sshm never reads private key material.
+sshm never reads private key material. `export` only includes public keys (`*.pub`).
 
 ---
 

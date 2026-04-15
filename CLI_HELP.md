@@ -7,6 +7,8 @@ This document contains the help content for the `sshm` command-line program.
 * [`sshm`↴](#sshm)
 * [`sshm ls`↴](#sshm-ls)
 * [`sshm clone`↴](#sshm-clone)
+* [`sshm export`↴](#sshm-export)
+* [`sshm import`↴](#sshm-import)
 * [`sshm create`↴](#sshm-create)
 * [`sshm edit`↴](#sshm-edit)
 * [`sshm delete`↴](#sshm-delete)
@@ -24,6 +26,8 @@ SSH config manager
 
 * `ls` — List all SSH hosts
 * `clone` — Clone an existing SSH host
+* `export` — Export SSH config and public keys into a backup archive
+* `import` — Import SSH config and public keys from a backup archive
 * `create` — Create a new SSH host
 * `edit` — Edit an existing SSH host
 * `delete` — Delete an SSH host
@@ -58,6 +62,38 @@ Reads and writes ~/.ssh/config only. No other files are accessed.
 
 * `<SOURCE>` — Source host alias to clone from
 * `<NAME>` — New host alias name (prompted if omitted)
+
+
+
+## `sshm export`
+
+Export SSH config and public keys into a backup archive
+
+Reads ~/.ssh/config and top-level ~/.ssh/*.pub files, then writes a local .zip archive. No private keys are read. No network requests are made.
+
+**Usage:** `sshm export [OUTPUT]`
+
+###### **Arguments:**
+
+* `<OUTPUT>` — Output archive path (default: ./sshm-backup-YYYYMMDD-HHMMSS.zip)
+
+
+
+## `sshm import`
+
+Import SSH config and public keys from a backup archive
+
+Reads a local .zip archive, validates it, then restores ~/.ssh/config and matching top-level ~/.ssh/*.pub files. Existing files that will be overwritten are backed up first. No private keys are read. No network requests are made.
+
+**Usage:** `sshm import [OPTIONS] <ARCHIVE>`
+
+###### **Arguments:**
+
+* `<ARCHIVE>` — Backup archive path
+
+###### **Options:**
+
+* `-y`, `--yes` — Skip the confirmation prompt
 
 
 

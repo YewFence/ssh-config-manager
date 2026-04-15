@@ -1,3 +1,4 @@
+mod archive;
 mod cli;
 mod commands;
 mod config;
@@ -12,6 +13,8 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Clone { source, name } => commands::clone::run(&source, name, &config_path),
+        Commands::Export { output } => commands::export::run(output, &config_path),
+        Commands::Import { archive, yes } => commands::import::run(&archive, yes, &config_path),
         Commands::Ls { show } => commands::ls::run(&config_path, show),
         Commands::Create {
             name,

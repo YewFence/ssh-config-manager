@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "sshm", about = "SSH config manager", version)]
@@ -28,6 +29,29 @@ pub enum Commands {
 
         /// New host alias name (prompted if omitted)
         name: Option<String>,
+    },
+
+    /// Export SSH config and public keys into a backup archive
+    ///
+    /// Reads ~/.ssh/config and top-level ~/.ssh/*.pub files, then writes a local .zip archive.
+    /// No private keys are read. No network requests are made.
+    Export {
+        /// Output archive path (default: ./sshm-backup-YYYYMMDD-HHMMSS.zip)
+        output: Option<PathBuf>,
+    },
+
+    /// Import SSH config and public keys from a backup archive
+    ///
+    /// Reads a local .zip archive, validates it, then restores ~/.ssh/config and matching
+    /// top-level ~/.ssh/*.pub files. Existing files that will be overwritten are backed up first.
+    /// No private keys are read. No network requests are made.
+    Import {
+        /// Backup archive path
+        archive: PathBuf,
+
+        /// Skip the confirmation prompt
+        #[arg(long, short = 'y')]
+        yes: bool,
     },
 
     /// Create a new SSH host
