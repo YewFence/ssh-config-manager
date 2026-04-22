@@ -1,9 +1,10 @@
-use crate::commands::create::{CreateFlags, apply_flag_updates, prompt_host};
 use crate::config;
 use anyhow::Result;
 use std::path::Path;
 
-pub fn run(name: &str, flags: CreateFlags, config_path: &Path) -> Result<()> {
+use super::host_builder::{HostFlags, apply_flag_updates, prompt_host};
+
+pub fn run(name: &str, flags: HostFlags, config_path: &Path) -> Result<()> {
     let mut config = config::load_config(config_path)?;
 
     let original = config

@@ -26,7 +26,7 @@ fn main() -> Result<()> {
             description,
         } => commands::create::run(
             name,
-            commands::create::CreateFlags {
+            commands::host_builder::HostFlags {
                 hostname,
                 user,
                 port,
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
             description,
         } => commands::edit::run(
             &name,
-            commands::create::CreateFlags {
+            commands::host_builder::HostFlags {
                 hostname,
                 user,
                 port,

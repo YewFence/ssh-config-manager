@@ -63,3 +63,37 @@ fn split_kv(s: &str) -> (&str, &str) {
     let value = s[idx..].trim();
     (key, value)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn parse_maps_known_advanced_directives_to_structured_fields() {
+        let config = parse(
+            "\
+Host demo
+    HostName example.com
+    PreferredAuthentications password
+    ForwardAgent yes
+    LocalForward 8080:localhost:80
+    RemoteForward 9090:localhost:90
+    SetEnv APP_ENV=prod
+    SendEnv LANG LC_*
+    StrictHostKeyChecking no
+",
+        );
+
+        let host = &config.hosts[0];
+        assert_eq!(host.preferred_authentications.as_deref(), Some("password"));
+        assert_eq!(host.forward_agent.as_deref(), Some("yes"));
+        assert_eq!(host.local_forwards, vec!["8080:localhost:80"]);
+        assert_eq!(host.remote_forwards, vec!["9090:localhost:90"]);
+        assert_eq!(host.set_env, vec!["APP_ENV=prod"]);
+        assert_eq!(host.send_env, vec!["LANG LC_*"]);
+        assert_eq!(
+            host.extra,
+            vec![("StrictHostKeyChecking".to_string(), "no".to_string())]
+        );
+    }
+}

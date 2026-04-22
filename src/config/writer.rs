@@ -34,6 +34,24 @@ pub fn serialize(config: &SshConfig) -> String {
         if let Some(ref v) = host.proxy_jump {
             out.push_str(&format!("    ProxyJump {}\n", v));
         }
+        if let Some(ref v) = host.preferred_authentications {
+            out.push_str(&format!("    PreferredAuthentications {}\n", v));
+        }
+        if let Some(ref v) = host.forward_agent {
+            out.push_str(&format!("    ForwardAgent {}\n", v));
+        }
+        for value in &host.local_forwards {
+            out.push_str(&format!("    LocalForward {}\n", value));
+        }
+        for value in &host.remote_forwards {
+            out.push_str(&format!("    RemoteForward {}\n", value));
+        }
+        for value in &host.set_env {
+            out.push_str(&format!("    SetEnv {}\n", value));
+        }
+        for value in &host.send_env {
+            out.push_str(&format!("    SendEnv {}\n", value));
+        }
         for (k, v) in &host.extra {
             out.push_str(&format!("    {} {}\n", k, v));
         }
@@ -41,4 +59,53 @@ pub fn serialize(config: &SshConfig) -> String {
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::serialize;
+    use crate::config::{SshConfig, SshHost};
+
+    #[test]
+    fn serialize_writes_structured_directives_before_extra() {
+        let config = SshConfig {
+            hosts: vec![SshHost {
+                alias: "demo".to_string(),
+                description: Some("desc".to_string()),
+                hostname: Some("example.com".to_string()),
+                user: Some("root".to_string()),
+                port: Some(2222),
+                identity_file: None,
+                proxy_jump: Some("bastion".to_string()),
+                preferred_authentications: Some("password".to_string()),
+                forward_agent: Some("yes".to_string()),
+                local_forwards: vec!["8080:localhost:80".to_string()],
+                remote_forwards: vec!["9090:localhost:90".to_string()],
+                set_env: vec!["APP_ENV=prod".to_string()],
+                send_env: vec!["LANG LC_*".to_string()],
+                extra: vec![("StrictHostKeyChecking".to_string(), "no".to_string())],
+            }],
+            header_comments: vec![],
+        };
+
+        assert_eq!(
+            serialize(&config),
+            "\
+# desc
+Host demo
+    HostName example.com
+    User root
+    Port 2222
+    ProxyJump bastion
+    PreferredAuthentications password
+    ForwardAgent yes
+    LocalForward 8080:localhost:80
+    RemoteForward 9090:localhost:90
+    SetEnv APP_ENV=prod
+    SendEnv LANG LC_*
+    StrictHostKeyChecking no
+
+"
+        );
+    }
 }
