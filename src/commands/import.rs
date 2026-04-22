@@ -11,6 +11,12 @@ pub fn run(archive_path: &Path, yes: bool, config_path: &Path) -> Result<()> {
         .parent()
         .context("Cannot determine ~/.ssh directory from config path")?;
     fs::create_dir_all(ssh_dir).with_context(|| format!("Failed to create {}", ssh_dir.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(ssh_dir, fs::Permissions::from_mode(0o700))
+            .with_context(|| format!("Failed to set permissions on {}", ssh_dir.display()))?;
+    }
 
     let extraction_dir = tempdir()?;
     let imported = archive::extract_archive(archive_path, extraction_dir.path())?;
