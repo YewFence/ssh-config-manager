@@ -5,7 +5,8 @@ use std::path::Path;
 use super::{
     AdvancedConfigChoice, EnvRuleChoice, ForwardRuleChoice, prompt_advanced_config_choice,
     prompt_env_rule_choice, prompt_env_values, prompt_forward_rule_choice, prompt_forwards,
-    prompt_identity, prompt_optional, prompt_port, prompt_required, resolve_identity_file,
+    prompt_identity, prompt_optional, prompt_port, prompt_required, prompt_yes_no_directive,
+    resolve_identity_file,
 };
 
 pub struct CreateFlags {
@@ -97,6 +98,7 @@ pub fn prompt_host(
     );
     let mut proxy_jump =
         merge_optional_flag(flags.proxy_jump, preset.and_then(|h| h.proxy_jump.clone()));
+    let mut forward_agent = extra_value(preset, "ForwardAgent");
     let mut local_fwds = extra_values(preset, "LocalForward");
     let mut remote_fwds = extra_values(preset, "RemoteForward");
     let mut set_envs = extra_values(preset, "SetEnv");
@@ -106,6 +108,7 @@ pub fn prompt_host(
         prompt_advanced_sections(
             &mut description,
             &mut proxy_jump,
+            &mut forward_agent,
             &mut local_fwds,
             &mut remote_fwds,
             &mut set_envs,
@@ -115,6 +118,7 @@ pub fn prompt_host(
 
     let extra = build_extra(
         &identity_file,
+        &forward_agent,
         &local_fwds,
         &remote_fwds,
         &set_envs,
@@ -149,6 +153,7 @@ pub fn apply_flag_updates(
     };
     let proxy_jump = merge_optional_flag(flags.proxy_jump, preset.proxy_jump.clone());
     let description = merge_optional_flag(flags.description, preset.description.clone());
+    let forward_agent = extra_value(Some(preset), "ForwardAgent");
 
     let local_fwds = extra_values(Some(preset), "LocalForward");
     let remote_fwds = extra_values(Some(preset), "RemoteForward");
@@ -156,6 +161,7 @@ pub fn apply_flag_updates(
     let send_envs = extra_values(Some(preset), "SendEnv");
     let extra = build_extra(
         &identity_file,
+        &forward_agent,
         &local_fwds,
         &remote_fwds,
         &set_envs,
@@ -178,6 +184,7 @@ pub fn apply_flag_updates(
 fn prompt_advanced_sections(
     description: &mut Option<String>,
     proxy_jump: &mut Option<String>,
+    forward_agent: &mut Option<String>,
     local_fwds: &mut Vec<String>,
     remote_fwds: &mut Vec<String>,
     set_envs: &mut Vec<String>,
@@ -192,6 +199,9 @@ fn prompt_advanced_sections(
                     proxy_jump.as_deref().unwrap_or(""),
                     None,
                 )?;
+            }
+            AdvancedConfigChoice::ForwardAgent => {
+                prompt_yes_no_directive("ForwardAgent:", forward_agent)?;
             }
             AdvancedConfigChoice::ForwardRules => {
                 prompt_forward_sections(local_fwds, remote_fwds)?;
@@ -249,6 +259,10 @@ fn prompt_env_sections(set_envs: &mut Vec<String>, send_envs: &mut Vec<String>) 
     Ok(())
 }
 
+fn extra_value(preset: Option<&SshHost>, key: &str) -> Option<String> {
+    extra_values(preset, key).into_iter().next()
+}
+
 /// 从 extra 中按 key 筛出已有的指令值
 fn extra_values(preset: Option<&SshHost>, key: &str) -> Vec<String> {
     preset
@@ -273,6 +287,7 @@ fn merge_optional_flag(flag: Option<String>, current: Option<String>) -> Option<
 /// 构建 extra：PreferredAuthentications + managed directives + 保留其他 extra 项
 fn build_extra(
     identity_file: &Option<String>,
+    forward_agent: &Option<String>,
     local_fwds: &[String],
     remote_fwds: &[String],
     set_envs: &[String],
@@ -288,7 +303,7 @@ fn build_extra(
         ));
     }
 
-    // 保留 preset 中非托管的 extra 项（如 ForwardAgent、StrictHostKeyChecking 等）
+    // 保留 preset 中非托管的 extra 项（如 StrictHostKeyChecking 等）
     if let Some(h) = preset {
         for (k, v) in &h.extra {
             if !is_managed_extra_key(k) {
@@ -297,6 +312,9 @@ fn build_extra(
         }
     }
 
+    if let Some(value) = forward_agent {
+        extra.push(("ForwardAgent".to_string(), value.clone()));
+    }
     for rule in local_fwds {
         extra.push(("LocalForward".to_string(), rule.clone()));
     }
@@ -314,7 +332,8 @@ fn build_extra(
 }
 
 fn is_managed_extra_key(key: &str) -> bool {
-    key.eq_ignore_ascii_case("LocalForward")
+    key.eq_ignore_ascii_case("ForwardAgent")
+        || key.eq_ignore_ascii_case("LocalForward")
         || key.eq_ignore_ascii_case("RemoteForward")
         || key.eq_ignore_ascii_case("SetEnv")
         || key.eq_ignore_ascii_case("SendEnv")
@@ -351,6 +370,7 @@ mod tests {
 
         let extra = build_extra(
             &None,
+            &Some("no".to_string()),
             &["8080:localhost:80".to_string()],
             &["9090:localhost:90".to_string()],
             &["APP_ENV=prod".to_string()],
@@ -365,7 +385,7 @@ mod tests {
                     "PreferredAuthentications".to_string(),
                     "password".to_string()
                 ),
-                ("ForwardAgent".to_string(), "yes".to_string()),
+                ("ForwardAgent".to_string(), "no".to_string()),
                 ("LocalForward".to_string(), "8080:localhost:80".to_string()),
                 ("RemoteForward".to_string(), "9090:localhost:90".to_string()),
                 ("SetEnv".to_string(), "APP_ENV=prod".to_string()),

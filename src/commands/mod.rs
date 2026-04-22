@@ -12,11 +12,12 @@ use std::fmt;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use inquire::{Select, Text, validator::Validation};
+use inquire::{validator::Validation, Select, Text};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdvancedConfigChoice {
     ProxyJump,
+    ForwardAgent,
     ForwardRules,
     EnvRules,
     Description,
@@ -27,6 +28,7 @@ impl fmt::Display for AdvancedConfigChoice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ProxyJump => write!(f, "[p] ProxyJump"),
+            Self::ForwardAgent => write!(f, "[a] ForwardAgent"),
             Self::ForwardRules => write!(f, "[f] Forward"),
             Self::EnvRules => write!(f, "[e] Env"),
             Self::Description => write!(f, "[d] Description"),
@@ -84,6 +86,25 @@ impl fmt::Display for DirectiveListAction {
             Self::ReplaceAll => write!(f, "Replace all"),
             Self::ClearAll => write!(f, "Clear all"),
             Self::Back => write!(f, "Back"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToggleDirectiveChoice {
+    Yes,
+    No,
+    Unset,
+    Back,
+}
+
+impl fmt::Display for ToggleDirectiveChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Yes => write!(f, "yes"),
+            Self::No => write!(f, "no"),
+            Self::Unset => write!(f, "unset"),
+            Self::Back => write!(f, "back"),
         }
     }
 }
@@ -173,6 +194,7 @@ pub fn sanitize_filename(hostname: &str) -> String {
 pub fn prompt_advanced_config_choice() -> Result<AdvancedConfigChoice> {
     let options = vec![
         AdvancedConfigChoice::ProxyJump,
+        AdvancedConfigChoice::ForwardAgent,
         AdvancedConfigChoice::ForwardRules,
         AdvancedConfigChoice::EnvRules,
         AdvancedConfigChoice::Description,
@@ -208,6 +230,35 @@ pub fn prompt_env_rule_choice() -> Result<EnvRuleChoice> {
     .without_filtering()
     .with_starting_cursor(2)
     .prompt()?)
+}
+
+pub fn prompt_yes_no_directive(label: &str, current: &mut Option<String>) -> Result<()> {
+    let options = vec![
+        ToggleDirectiveChoice::Yes,
+        ToggleDirectiveChoice::No,
+        ToggleDirectiveChoice::Unset,
+        ToggleDirectiveChoice::Back,
+    ];
+    let starting_cursor = match current.as_deref() {
+        Some(value) if value.eq_ignore_ascii_case("yes") => 0,
+        Some(value) if value.eq_ignore_ascii_case("no") => 1,
+        None => 2,
+        _ => 3,
+    };
+
+    let choice = Select::new(label, options)
+        .without_filtering()
+        .with_starting_cursor(starting_cursor)
+        .prompt()?;
+
+    match choice {
+        ToggleDirectiveChoice::Yes => *current = Some("yes".to_string()),
+        ToggleDirectiveChoice::No => *current = Some("no".to_string()),
+        ToggleDirectiveChoice::Unset => *current = None,
+        ToggleDirectiveChoice::Back => {}
+    }
+
+    Ok(())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

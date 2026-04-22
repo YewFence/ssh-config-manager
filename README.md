@@ -87,7 +87,7 @@ output:
 Create a new host.
 
 - Interactive mode asks for `alias`, `HostName`, `User`, `Port`, and `IdentityFile`
-- After the base fields, an advanced menu lets you configure `ProxyJump`, forwards, `SetEnv` / `SendEnv`, and description
+- After the base fields, an advanced menu lets you configure `ProxyJump`, `ForwardAgent`, forwards, `SetEnv` / `SendEnv`, and description
 - If flags are provided, prompts are skipped for those fields and the advanced menu is skipped
 
 ```bash
@@ -247,5 +247,5 @@ sshm never reads private key material. `export` only includes public keys (`*.pu
 ## Notes
 
 - Top-level comments and unrecognized directives (e.g. `ForwardAgent`) are preserved when editing
-- Interactive advanced config supports `ProxyJump`, `LocalForward`, `RemoteForward`, `SetEnv`, and `SendEnv`
+- Interactive advanced config supports `ProxyJump`, `ForwardAgent`, `LocalForward`, `RemoteForward`, `SetEnv`, and `SendEnv`
 - File permissions are automatically set to `600` after writing on Unix systems
