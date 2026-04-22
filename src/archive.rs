@@ -1,11 +1,13 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, Seek, Write};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Component, Path, PathBuf};
-use zip::{write::FileOptions, CompressionMethod, ZipArchive, ZipWriter};
+use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 pub const FORMAT_VERSION: u32 = 1;
 pub const MANIFEST_ENTRY: &str = "manifest.json";
@@ -56,8 +58,8 @@ pub fn collect_public_key_files(ssh_dir: &Path) -> Result<Vec<PathBuf>> {
         return Ok(public_keys);
     }
 
-    for entry in fs::read_dir(ssh_dir)
-        .with_context(|| format!("Failed to read {}", ssh_dir.display()))?
+    for entry in
+        fs::read_dir(ssh_dir).with_context(|| format!("Failed to read {}", ssh_dir.display()))?
     {
         let entry = entry?;
         let file_type = entry.file_type()?;
@@ -105,9 +107,12 @@ pub fn create_archive(config_path: &Path, output_path: &Path) -> Result<ExportSu
         public_keys: public_keys.clone(),
     };
 
-    let archive_file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut archive_options = fs::OpenOptions::new();
+    archive_options.write(true).create_new(true);
+    #[cfg(unix)]
+    archive_options.mode(0o600);
+
+    let archive_file = archive_options
         .open(output_path)
         .with_context(|| format!("Failed to create {}", output_path.display()))?;
     let mut zip = ZipWriter::new(archive_file);
@@ -154,10 +159,6 @@ pub fn extract_archive(archive_path: &Path, destination: &Path) -> Result<Import
 
         if !seen_entries.insert(entry_name.clone()) {
             bail!("Archive contains duplicate entry '{}'", entry_name);
-        }
-
-        if entry_name.ends_with('/') {
-            bail!("Archive entry '{}' must be a file", entry_name);
         }
 
         let output_path = destination.join(&entry_name);
@@ -214,8 +215,8 @@ where
     Ok(())
 }
 
-fn archive_file_options() -> FileOptions {
-    FileOptions::default().compression_method(CompressionMethod::Deflated)
+fn archive_file_options() -> SimpleFileOptions {
+    SimpleFileOptions::default().compression_method(CompressionMethod::Deflated)
 }
 
 fn validate_archive_entry_name(entry_name: &str) -> Result<()> {
@@ -242,7 +243,10 @@ fn validate_archive_entry_name(entry_name: &str) -> Result<()> {
     bail!("Unsupported archive entry '{}'", entry_name);
 }
 
-fn validate_manifest(manifest: &BackupManifest, extracted_public_keys: &[ExtractedPublicKey]) -> Result<()> {
+fn validate_manifest(
+    manifest: &BackupManifest,
+    extracted_public_keys: &[ExtractedPublicKey],
+) -> Result<()> {
     if manifest.format_version != FORMAT_VERSION {
         bail!(
             "Unsupported backup format version {}",
@@ -319,6 +323,8 @@ fn timestamp_slug() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
 
     fn write_zip_entry_map(zip_path: &Path, entries: &[(&str, &[u8])]) -> Result<()> {
@@ -388,6 +394,24 @@ mod tests {
             fs::read_to_string(extract_dir.join(public_key_entry_name("z.pub")))?,
             "ssh-ed25519 BBBB z"
         );
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_archive_uses_private_permissions() -> Result<()> {
+        let source = tempdir()?;
+        let ssh_dir = source.path().join(".ssh");
+        fs::create_dir_all(&ssh_dir)?;
+
+        let config_path = ssh_dir.join("config");
+        fs::write(&config_path, "Host app\n    HostName example.com\n")?;
+
+        let archive_path = source.path().join("backup.zip");
+        create_archive(&config_path, &archive_path)?;
+
+        let mode = fs::metadata(&archive_path)?.permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
         Ok(())
     }
 
