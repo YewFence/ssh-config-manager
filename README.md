@@ -11,7 +11,7 @@ SSH config manager — a CLI tool for managing `~/.ssh/config`.
 ### Mise
 
 ```bash
-mise use -g github:YewFence/ssh-config-managers
+mise use -g github:YewFence/ssh-config-manager
 ```
 
 ### Homebrew (macOS / Linux)
