@@ -2,6 +2,8 @@ pub mod clone;
 pub mod create;
 pub mod delete;
 pub mod edit;
+pub mod export;
+pub mod import;
 pub mod ls;
 pub mod open;
 pub mod prune;
@@ -9,7 +11,7 @@ pub mod prune;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use inquire::{validator::Validation, Text};
+use inquire::{Text, validator::Validation};
 
 /// 识别 identity 输入类型并返回最终写入 config 的路径。
 ///
@@ -34,8 +36,8 @@ pub fn resolve_identity_file(input: &str, alias: &str) -> Result<Option<String>>
             name_input
         };
 
-        let home = dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+        let home =
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
         let ssh_dir = home.join(".ssh");
         std::fs::create_dir_all(&ssh_dir)?;
         let key_path = ssh_dir.join(format!("{}.pub", key_name));
@@ -174,7 +176,9 @@ pub fn prompt_identity(alias: &str, flag: Option<String>, preset: &str) -> Resul
     let default = if preset.is_empty() { "" } else { preset };
     let input = Text::new("IdentityFile (path, filename, or paste public key):")
         .with_default(default)
-        .with_help_message("filename → auto-prefix ~/.ssh/ | pubkey content → saved to ~/.ssh/<name>.pub")
+        .with_help_message(
+            "filename → auto-prefix ~/.ssh/ | pubkey content → saved to ~/.ssh/<name>.pub",
+        )
         .prompt()?;
     resolve_identity_file(&input, alias)
 }
@@ -188,21 +192,29 @@ pub fn prompt_forwards(kind: &str, preset: &[String]) -> Result<Vec<String>> {
         for rule in preset {
             println!("  {} [{}]: {}", kind, rules.len(), rule);
         }
-        let again = Text::new(&format!("Add another {} rule? (press Enter to keep existing, or enter new rule):", kind))
-            .with_help_message("format: local_port:dest_host:dest_port, leave blank to keep current")
-            .prompt()?;
+        let again = Text::new(&format!(
+            "Add another {} rule? (press Enter to keep existing, or enter new rule):",
+            kind
+        ))
+        .with_help_message("format: local_port:dest_host:dest_port, leave blank to keep current")
+        .prompt()?;
         if !again.trim().is_empty() && validate_forward_format(again.trim()) {
             rules.push(again.trim().to_string());
         }
     } else {
-        println!("\nAdd {} rules (format: local_port:dest_host:dest_port)", kind);
+        println!(
+            "\nAdd {} rules (format: local_port:dest_host:dest_port)",
+            kind
+        );
         println!("Example: 8080:localhost:80  →  forwards local port 8080 to remote localhost:80");
         println!("Leave blank and press Enter to skip.\n");
 
         loop {
             let prompt = format!("{} [{}]:", kind, rules.len() + 1);
             let input = Text::new(&prompt)
-                .with_help_message("format: local_port:dest_host:dest_port (e.g., 8080:localhost:80)")
+                .with_help_message(
+                    "format: local_port:dest_host:dest_port (e.g., 8080:localhost:80)",
+                )
                 .prompt()?;
 
             if input.trim().is_empty() {

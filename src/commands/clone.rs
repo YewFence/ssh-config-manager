@@ -1,6 +1,6 @@
 use crate::config::{self, SshHost};
 use anyhow::Result;
-use inquire::{validator::Validation, Text};
+use inquire::{Text, validator::Validation};
 use std::path::Path;
 
 pub fn run(source: &str, name: Option<String>, config_path: &Path) -> Result<()> {

@@ -1,4 +1,4 @@
-use crate::commands::create::{prompt_host, CreateFlags};
+use crate::commands::create::{CreateFlags, prompt_host};
 use crate::config;
 use anyhow::Result;
 use std::path::Path;
