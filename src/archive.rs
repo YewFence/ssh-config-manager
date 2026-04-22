@@ -81,10 +81,6 @@ pub fn create_archive(config_path: &Path, output_path: &Path) -> Result<ExportSu
         bail!("SSH config not found at {}", config_path.display());
     }
 
-    if output_path.exists() {
-        bail!("Output archive already exists: {}", output_path.display());
-    }
-
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)
@@ -109,7 +105,10 @@ pub fn create_archive(config_path: &Path, output_path: &Path) -> Result<ExportSu
         public_keys: public_keys.clone(),
     };
 
-    let archive_file = File::create(output_path)
+    let archive_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output_path)
         .with_context(|| format!("Failed to create {}", output_path.display()))?;
     let mut zip = ZipWriter::new(archive_file);
 
