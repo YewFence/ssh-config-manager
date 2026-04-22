@@ -11,5 +11,8 @@ fn main() {
     let out_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("CLI_HELP.md");
     std::fs::write(&out_path, markdown).expect("Failed to write CLI_HELP.md");
 
-    println!("cargo:warning=Generated CLI documentation at {}", out_path.display());
+    println!(
+        "cargo:warning=Generated CLI documentation at {}",
+        out_path.display()
+    );
 }

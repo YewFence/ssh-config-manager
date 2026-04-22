@@ -69,7 +69,7 @@ Reads and writes ~/.ssh/config only. No other files are accessed.
 
 Export SSH config and public keys into a backup archive
 
-Reads ~/.ssh/config and top-level ~/.ssh/*.pub files, then writes a local .zip archive. No private keys are read. No network requests are made.
+Reads ~/.ssh/config and top-level ~/.ssh/*.pub files, then writes a local .zip archive. For backup/migration only, not sync. You handle copying, syncing, or encrypting the archive yourself. No private keys are read. No network requests are made.
 
 **Usage:** `sshm export [OUTPUT]`
 
@@ -83,7 +83,7 @@ Reads ~/.ssh/config and top-level ~/.ssh/*.pub files, then writes a local .zip a
 
 Import SSH config and public keys from a backup archive
 
-Reads a local .zip archive, validates it, then restores ~/.ssh/config and matching top-level ~/.ssh/*.pub files. Existing files that will be overwritten are backed up first. No private keys are read. No network requests are made.
+Reads a local .zip archive, validates it, then restores ~/.ssh/config and matching top-level ~/.ssh/*.pub files. Existing files that will be overwritten are backed up first. The archive does not include private keys; the matching private keys must already exist on this machine. No private keys are read. No network requests are made.
 
 **Usage:** `sshm import [OPTIONS] <ARCHIVE>`
 

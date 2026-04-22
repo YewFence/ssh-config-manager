@@ -20,6 +20,9 @@ pub fn run(archive_path: &Path, yes: bool, config_path: &Path) -> Result<()> {
         "Contains:   1 config file and {} public key file(s)",
         imported.public_keys.len()
     );
+    println!(
+        "Note: private keys are not included in this archive. Make sure the matching private keys already exist on this machine."
+    );
 
     if !yes {
         let confirmed = Confirm::new("Import this backup and overwrite the matching SSH files?")

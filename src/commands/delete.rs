@@ -1,5 +1,5 @@
 use crate::config;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use inquire::Confirm;
 use std::path::Path;
 

@@ -138,10 +138,12 @@ sshm export ./backups/sshm-backup.zip
 ```
 
 By default, sshm writes `./sshm-backup-YYYYMMDD-HHMMSS.zip`.
+This archive is for backup/migration only. `sshm` does not upload or sync it for you.
 
 ### `sshm import <archive>`
 
 Import a previously exported backup archive. Existing `config` and matching `.pub` files are backed up first to `~/.ssh/sshm-import-backup-<timestamp>/`.
+The archive does not include private keys, so the matching private keys must already exist on the target machine.
 
 ```bash
 sshm import ./sshm-backup.zip
@@ -171,8 +173,11 @@ sshm open config    # open config in editor
 
 `sshm export` is designed for migration and offline backup, not sync.
 
+- `sshm` only creates and reads local archives. It does not upload, download, watch, merge, or auto-sync them.
+- You handle copying, syncing, encrypting, and versioning the archive yourself.
 - Includes: `~/.ssh/config` and all top-level `~/.ssh/*.pub`
 - Excludes: private keys, `known_hosts`, `authorized_keys`, nested directories, and any cloud sync behavior
+- Import prerequisite: the matching private keys must already exist on the destination machine
 - Import behavior: validate archive, prompt for confirmation, back up files that will be overwritten, then restore `config` and matching `.pub`
 
 If you want to store archives remotely, prefer encryption outside `sshm`.

@@ -12,15 +12,23 @@ pub fn run(subcommand: Option<OpenSubcommand>) -> Result<()> {
         let config_file = home.join(".ssh").join("config");
 
         let opened = if let Some(parts) = std::env::var("VISUAL").ok().and_then(parse_editor_cmd) {
-            Command::new(&parts[0]).args(&parts[1..]).arg(&config_file).spawn()
+            Command::new(&parts[0])
+                .args(&parts[1..])
+                .arg(&config_file)
+                .spawn()
         } else if let Some(parts) = std::env::var("EDITOR").ok().and_then(parse_editor_cmd) {
-            Command::new(&parts[0]).args(&parts[1..]).arg(&config_file).spawn()
+            Command::new(&parts[0])
+                .args(&parts[1..])
+                .arg(&config_file)
+                .spawn()
         } else if cfg!(target_os = "windows") {
             Command::new("cmd")
                 .args(["/c", "start", "", &config_file.to_string_lossy()])
                 .spawn()
         } else if cfg!(target_os = "macos") {
-            Command::new("open").args(["-t", &config_file.to_string_lossy()]).spawn()
+            Command::new("open")
+                .args(["-t", &config_file.to_string_lossy()])
+                .spawn()
         } else {
             Command::new("xdg-open").arg(&config_file).spawn()
         };
@@ -56,9 +64,7 @@ pub fn run(subcommand: Option<OpenSubcommand>) -> Result<()> {
                     "/bin/sh".to_string()
                 }
             });
-            Command::new(&shell)
-                .current_dir(&ssh_dir)
-                .status()?;
+            Command::new(&shell).current_dir(&ssh_dir).status()?;
         }
     }
 

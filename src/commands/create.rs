@@ -59,14 +59,15 @@ pub fn prompt_host(
         "",
     )?;
 
-    let preset_desc = preset
-        .and_then(|h| h.description.as_deref())
-        .unwrap_or("");
-    let description = prompt_optional("Description (leave blank to skip):", flags.description, preset_desc, None)?;
+    let preset_desc = preset.and_then(|h| h.description.as_deref()).unwrap_or("");
+    let description = prompt_optional(
+        "Description (leave blank to skip):",
+        flags.description,
+        preset_desc,
+        None,
+    )?;
 
-    let preset_hostname = preset
-        .and_then(|h| h.hostname.as_deref())
-        .unwrap_or("");
+    let preset_hostname = preset.and_then(|h| h.hostname.as_deref()).unwrap_or("");
     let hostname = prompt_required("HostName (IP or domain):", flags.hostname, preset_hostname)?;
 
     let preset_user = preset.and_then(|h| h.user.as_deref()).unwrap_or("");
@@ -80,9 +81,7 @@ pub fn prompt_host(
         .unwrap_or("");
     let identity_file = prompt_identity(&alias, flags.identity_file, preset_identity)?;
 
-    let preset_proxy = preset
-        .and_then(|h| h.proxy_jump.as_deref())
-        .unwrap_or("");
+    let preset_proxy = preset.and_then(|h| h.proxy_jump.as_deref()).unwrap_or("");
     let proxy_jump = prompt_optional(
         "ProxyJump (host alias, leave blank to skip):",
         flags.proxy_jump,
@@ -132,7 +131,10 @@ fn build_extra(
     let mut extra = Vec::new();
 
     if identity_file.is_none() {
-        extra.push(("PreferredAuthentications".to_string(), "password".to_string()));
+        extra.push((
+            "PreferredAuthentications".to_string(),
+            "password".to_string(),
+        ));
     }
 
     // 保留 preset 中非 forward 的 extra 项（如 ForwardAgent、StrictHostKeyChecking 等）

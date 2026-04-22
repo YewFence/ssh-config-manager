@@ -11,7 +11,10 @@ pub fn run(output: Option<PathBuf>, config_path: &Path) -> Result<()> {
     let summary = archive::create_archive(config_path, &output_path)?;
 
     println!("Archive created at {}", summary.output_path.display());
-    println!("Included 1 config file and {} public key file(s).", summary.public_keys.len());
+    println!(
+        "Included 1 config file and {} public key file(s).",
+        summary.public_keys.len()
+    );
 
     if !summary.public_keys.is_empty() {
         println!("Public keys:");
@@ -19,6 +22,9 @@ pub fn run(output: Option<PathBuf>, config_path: &Path) -> Result<()> {
             println!("  {}", file_name);
         }
     }
+
+    println!("This archive is for backup/migration only.");
+    println!("sshm does not upload or sync archives; handle copying or encryption yourself.");
 
     Ok(())
 }

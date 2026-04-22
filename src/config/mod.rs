@@ -28,8 +28,7 @@ pub fn save_config(config: &SshConfig, path: &Path) -> Result<()> {
             .with_context(|| format!("Failed to create directory {}", parent.display()))?;
     }
     let content = writer::serialize(config);
-    std::fs::write(path, content)
-        .with_context(|| format!("Failed to write {}", path.display()))?;
+    std::fs::write(path, content).with_context(|| format!("Failed to write {}", path.display()))?;
 
     #[cfg(unix)]
     {

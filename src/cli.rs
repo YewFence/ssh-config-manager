@@ -34,7 +34,8 @@ pub enum Commands {
     /// Export SSH config and public keys into a backup archive
     ///
     /// Reads ~/.ssh/config and top-level ~/.ssh/*.pub files, then writes a local .zip archive.
-    /// No private keys are read. No network requests are made.
+    /// For backup/migration only, not sync. You handle copying, syncing, or encrypting the
+    /// archive yourself. No private keys are read. No network requests are made.
     Export {
         /// Output archive path (default: ./sshm-backup-YYYYMMDD-HHMMSS.zip)
         output: Option<PathBuf>,
@@ -44,7 +45,8 @@ pub enum Commands {
     ///
     /// Reads a local .zip archive, validates it, then restores ~/.ssh/config and matching
     /// top-level ~/.ssh/*.pub files. Existing files that will be overwritten are backed up first.
-    /// No private keys are read. No network requests are made.
+    /// The archive does not include private keys; the matching private keys must already exist on
+    /// this machine. No private keys are read. No network requests are made.
     Import {
         /// Backup archive path
         archive: PathBuf,
