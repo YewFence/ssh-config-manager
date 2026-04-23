@@ -1,11 +1,9 @@
-mod archive;
-mod cli;
-mod commands;
-mod config;
-
 use anyhow::Result;
 use clap::Parser;
-use cli::{Cli, Commands};
+use sshm::{
+    cli::{Cli, Commands},
+    commands, config,
+};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

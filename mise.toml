@@ -1,2 +1,7 @@
 [tools]
 rust = "latest"
+
+[tasks."gen-cli-help"]
+description = "Generate CLI_HELP.md from clap definitions"
+raw = true
+run = "cargo run --features cli-docs --bin gen-cli-help"

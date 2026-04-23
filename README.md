@@ -221,7 +221,11 @@ The `--identity-file` / `-i` flag accepts three formats:
 
 For complete command-line documentation (all subcommands, flags, and options), see **[CLI_HELP.md](./CLI_HELP.md)**.
 
-This file is auto-generated from source code and always up-to-date.
+Regenerate it with:
+
+```bash
+mise run gen-cli-help
+```
 
 ---
 
