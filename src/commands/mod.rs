@@ -509,3 +509,60 @@ fn validate_send_env_format(input: &str) -> bool {
 fn validate_non_empty(input: &str) -> bool {
     !input.trim().is_empty()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn resolve_identity_file_handles_empty_bare_name_and_path() {
+        assert_eq!(resolve_identity_file("", "demo").unwrap(), None);
+        assert_eq!(
+            resolve_identity_file("id_ed25519", "demo").unwrap(),
+            Some("~/.ssh/id_ed25519".to_string())
+        );
+        assert_eq!(
+            resolve_identity_file("/tmp/id_ed25519", "demo").unwrap(),
+            Some("/tmp/id_ed25519".to_string())
+        );
+    }
+
+    #[test]
+    fn sanitize_filename_replaces_unsafe_characters() {
+        assert_eq!(
+            sanitize_filename("user@example.com:2222/dev"),
+            "user_example_com_2222_dev"
+        );
+        assert_eq!(sanitize_filename("safe-host_01"), "safe-host_01");
+    }
+
+    #[test]
+    fn expand_tilde_leaves_non_tilde_paths_unchanged() {
+        assert_eq!(
+            expand_tilde("/tmp/id_ed25519").unwrap(),
+            PathBuf::from("/tmp/id_ed25519")
+        );
+        assert_eq!(
+            expand_tilde("relative/key").unwrap(),
+            PathBuf::from("relative/key")
+        );
+    }
+
+    #[test]
+    fn validators_accept_expected_formats() {
+        assert!(validate_forward_format("8080:localhost:80"));
+        assert!(!validate_forward_format("localhost:80"));
+        assert!(!validate_forward_format("8080::80"));
+        assert!(!validate_forward_format("8080:localhost:http"));
+
+        assert!(validate_set_env_format("APP_ENV=prod"));
+        assert!(!validate_set_env_format("APP_ENV"));
+
+        assert!(validate_send_env_format("LANG LC_*"));
+        assert!(!validate_send_env_format("LANG=en_US.UTF-8"));
+
+        assert!(validate_non_empty("value"));
+        assert!(!validate_non_empty("   "));
+    }
+}

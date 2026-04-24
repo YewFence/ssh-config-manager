@@ -7,25 +7,26 @@ pub fn parse(content: &str) -> SshConfig {
     let mut past_first_host = false;
     // 收集紧邻下一个 Host 行前的注释（空行会重置）
     let mut pending_comments: Vec<String> = Vec::new();
+    let mut pending_comment_lines: Vec<String> = Vec::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
 
         if trimmed.is_empty() {
             if !past_first_host {
+                header.append(&mut pending_comment_lines);
                 header.push(line.to_string());
             } else {
                 pending_comments.clear();
+                pending_comment_lines.clear();
             }
+            pending_comments.clear();
             continue;
         }
 
         if trimmed.starts_with('#') {
-            if !past_first_host {
-                header.push(line.to_string());
-            } else {
-                pending_comments.push(trimmed[1..].trim().to_string());
-            }
+            pending_comment_lines.push(line.to_string());
+            pending_comments.push(trimmed[1..].trim().to_string());
             continue;
         }
 
@@ -41,6 +42,7 @@ pub fn parse(content: &str) -> SshConfig {
                 host.description = Some(pending_comments.join("\n"));
             }
             pending_comments.clear();
+            pending_comment_lines.clear();
             current = Some(host);
         } else if let Some(ref mut h) = current {
             h.apply_directive(key, value);
@@ -94,6 +96,29 @@ Host demo
         assert_eq!(
             host.extra,
             vec![("StrictHostKeyChecking".to_string(), "no".to_string())]
+        );
+    }
+
+    #[test]
+    fn parse_keeps_header_comments_separate_from_host_description() {
+        let config = parse(
+            "\
+# Managed by hand
+
+# Demo host
+# Uses bastion
+Host demo
+    HostName example.com
+",
+        );
+
+        assert_eq!(
+            config.header_comments,
+            vec!["# Managed by hand".to_string(), "".to_string()]
+        );
+        assert_eq!(
+            config.hosts[0].description.as_deref(),
+            Some("Demo host\nUses bastion")
         );
     }
 }
