@@ -1,11 +1,9 @@
-mod archive;
-mod cli;
-mod commands;
-mod config;
-
 use anyhow::Result;
 use clap::Parser;
-use cli::{Cli, Commands};
+use sshm::{
+    cli::{Cli, Commands},
+    commands, config,
+};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -26,7 +24,7 @@ fn main() -> Result<()> {
             description,
         } => commands::create::run(
             name,
-            commands::create::CreateFlags {
+            commands::host_builder::HostFlags {
                 hostname,
                 user,
                 port,
@@ -46,7 +44,7 @@ fn main() -> Result<()> {
             description,
         } => commands::edit::run(
             &name,
-            commands::create::CreateFlags {
+            commands::host_builder::HostFlags {
                 hostname,
                 user,
                 port,

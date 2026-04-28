@@ -84,14 +84,18 @@ output:
 
 ### `sshm create [name]`
 
-Create a new host. If flags are provided, prompts are skipped for those fields.
+Create a new host.
+
+- Interactive mode asks for `alias`, `HostName`, `User`, `Port`, and `IdentityFile`
+- After the base fields, an advanced menu lets you configure `ProxyJump`, `ForwardAgent`, forwards, `SetEnv` / `SendEnv`, and description
+- If flags are provided, prompts are skipped for those fields and the advanced menu is skipped
 
 ```bash
 # Interactive
 sshm create
 sshm create myserver
 
-# Non-interactive (all fields via flags)
+# With flags
 sshm create myserver -H 192.168.1.10 -u root -p 2222 -i ~/.ssh/id_ed25519
 ```
 
@@ -99,7 +103,10 @@ sshm create myserver -H 192.168.1.10 -u root -p 2222 -i ~/.ssh/id_ed25519
 
 ### `sshm edit <name>`
 
-Edit an existing host. Flags update fields directly; omitted fields prompt interactively with current values as defaults.
+Edit an existing host.
+
+- Interactive mode uses current values as defaults and offers the same advanced menu as `create`
+- Flags update fields directly without entering the interactive flow
 
 ```bash
 # Interactive edit
@@ -214,7 +221,11 @@ The `--identity-file` / `-i` flag accepts three formats:
 
 For complete command-line documentation (all subcommands, flags, and options), see **[CLI_HELP.md](./CLI_HELP.md)**.
 
-This file is auto-generated from source code and always up-to-date.
+Regenerate it with:
+
+```bash
+mise run gen-cli-help
+```
 
 ---
 
@@ -239,5 +250,6 @@ sshm never reads private key material. `export` only includes public keys (`*.pu
 
 ## Notes
 
-- Top-level comments and unrecognized directives (e.g. `ForwardAgent`) are preserved when editing
+- Top-level comments and unrecognized directives (e.g. `StrictHostKeyChecking`) are preserved when editing
+- Interactive advanced config supports `ProxyJump`, `ForwardAgent`, `LocalForward`, `RemoteForward`, `SetEnv`, and `SendEnv`
 - File permissions are automatically set to `600` after writing on Unix systems

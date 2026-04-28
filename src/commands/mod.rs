@@ -3,15 +3,112 @@ pub mod create;
 pub mod delete;
 pub mod edit;
 pub mod export;
+pub mod host_builder;
 pub mod import;
 pub mod ls;
 pub mod open;
 pub mod prune;
 
+use std::fmt;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use inquire::{Text, validator::Validation};
+use inquire::{Select, Text, validator::Validation};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdvancedConfigChoice {
+    ProxyJump,
+    ForwardAgent,
+    ForwardRules,
+    EnvRules,
+    Description,
+    Finish,
+}
+
+impl fmt::Display for AdvancedConfigChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ProxyJump => write!(f, "[p] ProxyJump"),
+            Self::ForwardAgent => write!(f, "[a] ForwardAgent"),
+            Self::ForwardRules => write!(f, "[f] Forward"),
+            Self::EnvRules => write!(f, "[e] Env"),
+            Self::Description => write!(f, "[d] Description"),
+            Self::Finish => write!(f, "[q] Save and quit"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ForwardRuleChoice {
+    Local,
+    Remote,
+    Back,
+}
+
+impl fmt::Display for ForwardRuleChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Local => write!(f, "LocalForward"),
+            Self::Remote => write!(f, "RemoteForward"),
+            Self::Back => write!(f, "Back"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EnvRuleChoice {
+    Set,
+    Send,
+    Back,
+}
+
+impl fmt::Display for EnvRuleChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Set => write!(f, "SetEnv"),
+            Self::Send => write!(f, "SendEnv"),
+            Self::Back => write!(f, "Back"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DirectiveListAction {
+    Add,
+    ReplaceAll,
+    ClearAll,
+    Back,
+}
+
+impl fmt::Display for DirectiveListAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Add => write!(f, "Add entries"),
+            Self::ReplaceAll => write!(f, "Replace all"),
+            Self::ClearAll => write!(f, "Clear all"),
+            Self::Back => write!(f, "Back"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToggleDirectiveChoice {
+    Yes,
+    No,
+    Unset,
+    Back,
+}
+
+impl fmt::Display for ToggleDirectiveChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Yes => write!(f, "yes"),
+            Self::No => write!(f, "no"),
+            Self::Unset => write!(f, "unset"),
+            Self::Back => write!(f, "back"),
+        }
+    }
+}
 
 /// 识别 identity 输入类型并返回最终写入 config 的路径。
 ///
@@ -93,6 +190,76 @@ pub fn sanitize_filename(hostname: &str) -> String {
             }
         })
         .collect()
+}
+
+pub fn prompt_advanced_config_choice() -> Result<AdvancedConfigChoice> {
+    let options = vec![
+        AdvancedConfigChoice::ProxyJump,
+        AdvancedConfigChoice::ForwardAgent,
+        AdvancedConfigChoice::ForwardRules,
+        AdvancedConfigChoice::EnvRules,
+        AdvancedConfigChoice::Description,
+        AdvancedConfigChoice::Finish,
+    ];
+    let start = options.len() - 1;
+
+    Ok(Select::new("Advanced config:", options)
+        .without_filtering()
+        .with_starting_cursor(start)
+        .prompt()?)
+}
+
+pub fn prompt_forward_rule_choice() -> Result<ForwardRuleChoice> {
+    Ok(Select::new(
+        "Forward config:",
+        vec![
+            ForwardRuleChoice::Local,
+            ForwardRuleChoice::Remote,
+            ForwardRuleChoice::Back,
+        ],
+    )
+    .without_filtering()
+    .with_starting_cursor(2)
+    .prompt()?)
+}
+
+pub fn prompt_env_rule_choice() -> Result<EnvRuleChoice> {
+    Ok(Select::new(
+        "Env config:",
+        vec![EnvRuleChoice::Set, EnvRuleChoice::Send, EnvRuleChoice::Back],
+    )
+    .without_filtering()
+    .with_starting_cursor(2)
+    .prompt()?)
+}
+
+pub fn prompt_yes_no_directive(label: &str, current: &mut Option<String>) -> Result<()> {
+    let options = vec![
+        ToggleDirectiveChoice::Yes,
+        ToggleDirectiveChoice::No,
+        ToggleDirectiveChoice::Unset,
+        ToggleDirectiveChoice::Back,
+    ];
+    let starting_cursor = match current.as_deref() {
+        Some(value) if value.eq_ignore_ascii_case("yes") => 0,
+        Some(value) if value.eq_ignore_ascii_case("no") => 1,
+        None => 2,
+        _ => 3,
+    };
+
+    let choice = Select::new(label, options)
+        .without_filtering()
+        .with_starting_cursor(starting_cursor)
+        .prompt()?;
+
+    match choice {
+        ToggleDirectiveChoice::Yes => *current = Some("yes".to_string()),
+        ToggleDirectiveChoice::No => *current = Some("no".to_string()),
+        ToggleDirectiveChoice::Unset => *current = None,
+        ToggleDirectiveChoice::Back => {}
+    }
+
+    Ok(())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,50 +350,33 @@ pub fn prompt_identity(alias: &str, flag: Option<String>, preset: &str) -> Resul
     resolve_identity_file(&input, alias)
 }
 
-/// Forward 规则收集：展示已有规则，允许追加/跳过
-pub fn prompt_forwards(kind: &str, preset: &[String]) -> Result<Vec<String>> {
+/// 通用的多值 directive 编辑器：支持追加、整体替换、清空。
+pub fn prompt_directive_entries(
+    kind: &str,
+    preset: &[String],
+    help: &'static str,
+    validator: fn(&str) -> bool,
+    validation_error: &'static str,
+) -> Result<Vec<String>> {
     let mut rules: Vec<String> = preset.to_vec();
 
-    if !preset.is_empty() {
-        println!("\nExisting {} rules:", kind);
-        for rule in preset {
-            println!("  {} [{}]: {}", kind, rules.len(), rule);
-        }
-        let again = Text::new(&format!(
-            "Add another {} rule? (press Enter to keep existing, or enter new rule):",
-            kind
-        ))
-        .with_help_message("format: local_port:dest_host:dest_port, leave blank to keep current")
-        .prompt()?;
-        if !again.trim().is_empty() && validate_forward_format(again.trim()) {
-            rules.push(again.trim().to_string());
-        }
-    } else {
-        println!(
-            "\nAdd {} rules (format: local_port:dest_host:dest_port)",
-            kind
-        );
-        println!("Example: 8080:localhost:80  →  forwards local port 8080 to remote localhost:80");
-        println!("Leave blank and press Enter to skip.\n");
+    loop {
+        print_existing_entries(kind, &rules);
 
-        loop {
-            let prompt = format!("{} [{}]:", kind, rules.len() + 1);
-            let input = Text::new(&prompt)
-                .with_help_message(
-                    "format: local_port:dest_host:dest_port (e.g., 8080:localhost:80)",
-                )
-                .prompt()?;
-
-            if input.trim().is_empty() {
-                break;
+        let action = prompt_directive_list_action(!rules.is_empty())?;
+        match action {
+            DirectiveListAction::Add => {
+                prompt_directive_input_loop(kind, &mut rules, help, validator, validation_error)?
             }
-
-            if validate_forward_format(input.trim()) {
-                rules.push(input.trim().to_string());
-            } else {
-                println!("  Invalid format. Expected: local_port:dest_host:dest_port");
-                println!("  Example: 8080:localhost:80");
+            DirectiveListAction::ReplaceAll => {
+                rules.clear();
+                prompt_directive_input_loop(kind, &mut rules, help, validator, validation_error)?;
             }
+            DirectiveListAction::ClearAll => {
+                rules.clear();
+                println!("  Cleared all {} entries.\n", kind);
+            }
+            DirectiveListAction::Back => break,
         }
     }
 
@@ -235,6 +385,99 @@ pub fn prompt_forwards(kind: &str, preset: &[String]) -> Result<Vec<String>> {
     }
 
     Ok(rules)
+}
+
+/// Forward 规则收集：走通用的多值 directive 编辑器。
+pub fn prompt_forwards(kind: &str, preset: &[String]) -> Result<Vec<String>> {
+    prompt_directive_entries(
+        kind,
+        preset,
+        "format: local_port:dest_host:dest_port (e.g., 8080:localhost:80)",
+        validate_forward_format,
+        "Expected: local_port:dest_host:dest_port",
+    )
+}
+
+pub fn prompt_env_values(kind: &str, preset: &[String]) -> Result<Vec<String>> {
+    let (help, validator, validation_error) = match kind {
+        "SetEnv" => (
+            "example: APP_ENV=prod or APP_ENV=prod REGION=hk",
+            validate_set_env_format as fn(&str) -> bool,
+            "Expected: KEY=value (one or more pairs)",
+        ),
+        "SendEnv" => (
+            "example: LANG LC_*",
+            validate_send_env_format as fn(&str) -> bool,
+            "Expected: variable names or patterns like LANG LC_*",
+        ),
+        _ => (
+            "leave blank to finish",
+            validate_non_empty as fn(&str) -> bool,
+            "",
+        ),
+    };
+
+    prompt_directive_entries(kind, preset, help, validator, validation_error)
+}
+
+fn print_existing_entries(kind: &str, entries: &[String]) {
+    if entries.is_empty() {
+        println!("\nNo {} entries configured yet.\n", kind);
+        return;
+    }
+
+    println!("\nCurrent {} entries:", kind);
+    for (idx, entry) in entries.iter().enumerate() {
+        println!("  {} [{}]: {}", kind, idx + 1, entry);
+    }
+    println!();
+}
+
+fn prompt_directive_list_action(has_entries: bool) -> Result<DirectiveListAction> {
+    let mut options = vec![DirectiveListAction::Add];
+    if has_entries {
+        options.push(DirectiveListAction::ReplaceAll);
+        options.push(DirectiveListAction::ClearAll);
+    }
+    options.push(DirectiveListAction::Back);
+
+    let start = options.len() - 1;
+    Ok(Select::new("Choose an action:", options)
+        .without_filtering()
+        .with_starting_cursor(start)
+        .prompt()?)
+}
+
+fn prompt_directive_input_loop(
+    kind: &str,
+    rules: &mut Vec<String>,
+    help: &'static str,
+    validator: fn(&str) -> bool,
+    validation_error: &'static str,
+) -> Result<()> {
+    loop {
+        let prompt = format!("{} [{}]:", kind, rules.len() + 1);
+        let input = Text::new(&prompt)
+            .with_help_message(help)
+            .with_validator(move |s: &str| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() || validator(trimmed) {
+                    Ok(Validation::Valid)
+                } else {
+                    Ok(Validation::Invalid(validation_error.into()))
+                }
+            })
+            .prompt()?;
+
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            break;
+        }
+
+        rules.push(trimmed.to_string());
+    }
+
+    Ok(())
 }
 
 /// 验证 forward 格式: local_port:dest_host:dest_port
@@ -253,4 +496,73 @@ fn validate_forward_format(input: &str) -> bool {
         return false;
     }
     true
+}
+
+fn validate_set_env_format(input: &str) -> bool {
+    input.contains('=')
+}
+
+fn validate_send_env_format(input: &str) -> bool {
+    !input.trim().is_empty() && !input.contains('=')
+}
+
+fn validate_non_empty(input: &str) -> bool {
+    !input.trim().is_empty()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn resolve_identity_file_handles_empty_bare_name_and_path() {
+        assert_eq!(resolve_identity_file("", "demo").unwrap(), None);
+        assert_eq!(
+            resolve_identity_file("id_ed25519", "demo").unwrap(),
+            Some("~/.ssh/id_ed25519".to_string())
+        );
+        assert_eq!(
+            resolve_identity_file("/tmp/id_ed25519", "demo").unwrap(),
+            Some("/tmp/id_ed25519".to_string())
+        );
+    }
+
+    #[test]
+    fn sanitize_filename_replaces_unsafe_characters() {
+        assert_eq!(
+            sanitize_filename("user@example.com:2222/dev"),
+            "user_example_com_2222_dev"
+        );
+        assert_eq!(sanitize_filename("safe-host_01"), "safe-host_01");
+    }
+
+    #[test]
+    fn expand_tilde_leaves_non_tilde_paths_unchanged() {
+        assert_eq!(
+            expand_tilde("/tmp/id_ed25519").unwrap(),
+            PathBuf::from("/tmp/id_ed25519")
+        );
+        assert_eq!(
+            expand_tilde("relative/key").unwrap(),
+            PathBuf::from("relative/key")
+        );
+    }
+
+    #[test]
+    fn validators_accept_expected_formats() {
+        assert!(validate_forward_format("8080:localhost:80"));
+        assert!(!validate_forward_format("localhost:80"));
+        assert!(!validate_forward_format("8080::80"));
+        assert!(!validate_forward_format("8080:localhost:http"));
+
+        assert!(validate_set_env_format("APP_ENV=prod"));
+        assert!(!validate_set_env_format("APP_ENV"));
+
+        assert!(validate_send_env_format("LANG LC_*"));
+        assert!(!validate_send_env_format("LANG=en_US.UTF-8"));
+
+        assert!(validate_non_empty("value"));
+        assert!(!validate_non_empty("   "));
+    }
 }
