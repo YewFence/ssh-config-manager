@@ -17,7 +17,6 @@ pub fn parse(content: &str) -> SshConfig {
                 header.append(&mut pending_comment_lines);
                 header.push(line.to_string());
             } else {
-                pending_comments.clear();
                 pending_comment_lines.clear();
             }
             pending_comments.clear();
@@ -46,11 +45,18 @@ pub fn parse(content: &str) -> SshConfig {
             current = Some(host);
         } else if let Some(ref mut h) = current {
             h.apply_directive(key, value);
+            pending_comments.clear();
+            pending_comment_lines.clear();
         }
     }
 
     if let Some(h) = current {
         hosts.push(h);
+    }
+
+    if !past_first_host {
+        header.append(&mut pending_comment_lines);
+        pending_comments.clear();
     }
 
     SshConfig {
@@ -120,5 +126,41 @@ Host demo
             config.hosts[0].description.as_deref(),
             Some("Demo host\nUses bastion")
         );
+    }
+
+    #[test]
+    fn parse_preserves_comment_only_config_as_header_comments() {
+        let config = parse(
+            "\
+# Managed by hand
+# Keep this file
+",
+        );
+
+        assert!(config.hosts.is_empty());
+        assert_eq!(
+            config.header_comments,
+            vec![
+                "# Managed by hand".to_string(),
+                "# Keep this file".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_does_not_leak_in_host_comments_into_next_description() {
+        let config = parse(
+            "\
+Host first
+    HostName first.example.com
+    # Applies to the first host directive below
+    User root
+Host second
+    HostName second.example.com
+",
+        );
+
+        assert_eq!(config.hosts.len(), 2);
+        assert_eq!(config.hosts[1].description, None);
     }
 }

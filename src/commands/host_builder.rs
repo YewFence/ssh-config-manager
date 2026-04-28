@@ -123,7 +123,7 @@ pub fn apply_flag_updates(
     preset: &SshHost,
 ) -> Result<SshHost> {
     let alias = name.unwrap_or_else(|| preset.alias.clone());
-    let hostname = flags.hostname.or_else(|| preset.hostname.clone());
+    let hostname = merge_optional_flag(flags.hostname, preset.hostname.clone());
     let user = merge_optional_flag(flags.user, preset.user.clone());
     let port = flags.port.or(preset.port);
     let identity_file = match flags.identity_file {
@@ -296,5 +296,26 @@ mod tests {
             ),
             Some("publickey,password".to_string())
         );
+    }
+
+    #[test]
+    fn apply_flag_updates_treats_blank_hostname_as_clear() {
+        let preset = SshHost {
+            alias: "demo".to_string(),
+            hostname: Some("old.example.com".to_string()),
+            ..Default::default()
+        };
+        let flags = HostFlags {
+            hostname: Some(String::new()),
+            user: None,
+            port: None,
+            identity_file: None,
+            proxy_jump: None,
+            description: None,
+        };
+
+        let updated = apply_flag_updates(None, flags, &preset).unwrap();
+
+        assert_eq!(updated.hostname, None);
     }
 }

@@ -250,6 +250,6 @@ sshm never reads private key material. `export` only includes public keys (`*.pu
 
 ## Notes
 
-- Top-level comments and unrecognized directives (e.g. `ForwardAgent`) are preserved when editing
+- Top-level comments and unrecognized directives (e.g. `StrictHostKeyChecking`) are preserved when editing
 - Interactive advanced config supports `ProxyJump`, `ForwardAgent`, `LocalForward`, `RemoteForward`, `SetEnv`, and `SendEnv`
 - File permissions are automatically set to `600` after writing on Unix systems
