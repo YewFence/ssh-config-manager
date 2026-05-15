@@ -8,6 +8,7 @@ pub mod import;
 pub mod ls;
 pub mod open;
 pub mod prune;
+pub mod tui;
 
 use std::fmt;
 use std::path::PathBuf;

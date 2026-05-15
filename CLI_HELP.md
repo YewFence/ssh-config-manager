@@ -13,6 +13,7 @@ This document contains the help content for the `sshm` command-line program.
 * [`sshm edit`↴](#sshm-edit)
 * [`sshm delete`↴](#sshm-delete)
 * [`sshm prune`↴](#sshm-prune)
+* [`sshm tui`↴](#sshm-tui)
 * [`sshm open`↴](#sshm-open)
 * [`sshm open config`↴](#sshm-open-config)
 
@@ -32,6 +33,7 @@ SSH config manager
 * `edit` — Edit an existing SSH host
 * `delete` — Delete an SSH host
 * `prune` — Scan for unused key files in ~/.ssh
+* `tui` — Open the full-screen terminal UI
 * `open` — Open ~/.ssh directory in system file manager
 
 
@@ -164,6 +166,16 @@ Scan for unused key files in ~/.ssh
 Reads ~/.ssh/config and scans the ~/.ssh/ directory listing. Read-only — no files are deleted or modified.
 
 **Usage:** `sshm prune`
+
+
+
+## `sshm tui`
+
+Open the full-screen terminal UI
+
+Reads and writes ~/.ssh/config. It can create, edit, and delete hosts. Associated key files are not deleted. No network requests are made.
+
+**Usage:** `sshm tui`
 
 
 

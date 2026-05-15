@@ -56,6 +56,7 @@ fn main() -> Result<()> {
         ),
         Commands::Delete { name } => commands::delete::run(&name, &config_path),
         Commands::Prune => commands::prune::run(&config_path),
+        Commands::Tui => commands::tui::run(&config_path),
         Commands::Open { subcommand } => commands::open::run(subcommand),
     }
 }
