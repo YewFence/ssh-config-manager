@@ -240,7 +240,7 @@ fn merge_optional_flag(flag: Option<String>, current: Option<String>) -> Option<
     }
 }
 
-fn preferred_authentications_for(
+pub(crate) fn preferred_authentications_for(
     identity_file: &Option<String>,
     current: Option<&str>,
 ) -> Option<String> {

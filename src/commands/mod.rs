@@ -145,13 +145,35 @@ pub fn resolve_identity_file(input: &str, alias: &str) -> Result<Option<String>>
         return Ok(Some(format!("~/.ssh/{}.pub", key_name)));
     }
 
-    // 纯文件名：不含 / 或 \
-    if !input.contains('/') && !input.contains('\\') {
-        println!("Using ~/.ssh/{} as the identity file path.", input);
-        return Ok(Some(format!("~/.ssh/{}", input)));
+    let identity_file = normalize_identity_file_path(input)?;
+    if let Some(value) = identity_file.as_deref()
+        && !input.trim().contains('/')
+        && !input.trim().contains('\\')
+    {
+        println!("Using {} as the identity file path.", value);
     }
 
-    Ok(Some(input.to_string()))
+    Ok(identity_file)
+}
+
+pub fn normalize_identity_file_path(input: &str) -> Result<Option<String>> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    if is_public_key(trimmed) {
+        anyhow::bail!(
+            "Pasted public keys need the interactive create/edit flow so sshm can ask for a filename."
+        );
+    }
+
+    // 纯文件名：不含 / 或 \
+    if !trimmed.contains('/') && !trimmed.contains('\\') {
+        return Ok(Some(format!("~/.ssh/{}", trimmed)));
+    }
+
+    Ok(Some(trimmed.to_string()))
 }
 
 fn is_public_key(s: &str) -> bool {
