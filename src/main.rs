@@ -1,8 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 use sshm::{
-    cli::{Cli, Commands},
-    commands, config,
+    cli::{Cli, Commands, commands},
+    core::config,
+    tui,
 };
 
 fn main() -> Result<()> {
@@ -56,7 +57,7 @@ fn main() -> Result<()> {
         ),
         Commands::Delete { name } => commands::delete::run(&name, &config_path),
         Commands::Prune => commands::prune::run(&config_path),
-        Commands::Tui => commands::tui::run(&config_path),
+        Commands::Tui => tui::run(&config_path),
         Commands::Open { subcommand } => commands::open::run(subcommand),
     }
 }

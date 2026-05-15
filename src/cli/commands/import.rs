@@ -1,4 +1,4 @@
-use crate::archive;
+use crate::core::archive;
 use anyhow::{Context, Result};
 use inquire::Confirm;
 use std::fs;

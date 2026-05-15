@@ -1,4 +1,4 @@
-use crate::config;
+use crate::core::{config, hosts};
 use anyhow::Result;
 use std::path::Path;
 
@@ -10,16 +10,8 @@ pub fn run(name: Option<String>, flags: HostFlags, config_path: &Path) -> Result
 
     let host = prompt_host(name, flags, None, show_advanced_menu)?;
 
-    if config.contains(&host.alias) {
-        anyhow::bail!(
-            "Host '{}' already exists. Use `sshm edit {}` to modify it.",
-            host.alias,
-            host.alias
-        );
-    }
-
-    let alias = host.alias.clone();
-    config.hosts.push(host);
+    let index = hosts::add_host(&mut config, host)?;
+    let alias = config.hosts[index].alias.clone();
     config::save_config(&config, config_path)?;
     println!("Host '{}' added.", alias);
     Ok(())

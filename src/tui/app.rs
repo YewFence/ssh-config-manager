@@ -3,11 +3,14 @@ use std::path::PathBuf;
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::config::{self, SshConfig, SshHost};
+use crate::core::{
+    config::{self, SshConfig, SshHost},
+    hosts,
+};
 
 use super::{
     editor::{EditorAction, FieldEditor, TextAreaEditor},
-    fields::{self, EDITABLE_FIELDS, EditableField},
+    fields::{EDITABLE_FIELDS, EditableField},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -249,8 +252,9 @@ impl TuiApp {
     }
 
     fn save_new_host(&mut self, mut editor: FieldEditor) -> Result<()> {
-        let alias = match fields::validate_alias(&self.config, None, &editor.value) {
-            Ok(alias) => alias,
+        let mut next_config = self.config.clone();
+        let added_index = match hosts::add_empty_host(&mut next_config, &editor.value) {
+            Ok(index) => index,
             Err(err) => {
                 editor.error = Some(err.to_string());
                 self.dialog = Some(Dialog::Create(editor));
@@ -258,12 +262,11 @@ impl TuiApp {
             }
         };
 
-        let mut next_config = self.config.clone();
-        next_config.hosts.push(SshHost::new(alias.clone()));
+        let alias = next_config.hosts[added_index].alias.clone();
         config::save_config(&next_config, &self.config_path)?;
 
         self.config = next_config;
-        self.selected_host = self.config.hosts.len().saturating_sub(1);
+        self.selected_host = added_index;
         self.selected_field = EditableField::HostName.index();
         self.focus = FocusPane::Fields;
         self.status = format!(
@@ -350,17 +353,16 @@ impl TuiApp {
 
     fn confirm_delete(&mut self, alias: String) -> Result<()> {
         let mut next_config = self.config.clone();
-        let Some(index) = next_config
-            .hosts
-            .iter()
-            .position(|host| host.alias == alias)
-        else {
-            self.status = format!("Host '{}' no longer exists.", alias);
-            self.clamp_selection();
-            return Ok(());
+        let index = match hosts::find_host_index(&next_config, &alias) {
+            Some(index) => index,
+            None => {
+                self.status = format!("Host '{}' no longer exists.", alias);
+                self.clamp_selection();
+                return Ok(());
+            }
         };
 
-        next_config.hosts.remove(index);
+        hosts::delete_host(&mut next_config, &alias)?;
         config::save_config(&next_config, &self.config_path)?;
 
         self.config = next_config;
@@ -565,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn confirm_delete_writes_config_and_clamps_selection() {
+    fn confirm_delete_uses_core_delete_and_clamps_selection() {
         let temp = tempfile::tempdir().unwrap();
         let config_path = temp.path().join("config");
         config::save_config(

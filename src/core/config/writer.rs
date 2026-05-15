@@ -64,7 +64,7 @@ pub fn serialize(config: &SshConfig) -> String {
 #[cfg(test)]
 mod tests {
     use super::serialize;
-    use crate::config::{SshConfig, SshHost};
+    use crate::core::config::{SshConfig, SshHost};
 
     #[test]
     fn serialize_writes_structured_directives_before_extra() {

@@ -1,4 +1,6 @@
-use crate::config::SshHost;
+use crate::core::config::SshHost;
+use crate::core::hosts::{FieldChange, HostPatch, optional_resolved_string, optional_string_flag};
+use crate::core::ssh::preferred_authentications_for;
 use anyhow::Result;
 
 use super::{
@@ -25,6 +27,22 @@ impl HostFlags {
             || self.identity_file.is_some()
             || self.proxy_jump.is_some()
             || self.description.is_some()
+    }
+
+    pub fn into_patch(self, alias: &str) -> Result<HostPatch> {
+        let identity_file = match self.identity_file {
+            Some(value) => optional_resolved_string(resolve_identity_file(&value, alias)?),
+            None => FieldChange::Keep,
+        };
+
+        Ok(HostPatch {
+            hostname: optional_string_flag(self.hostname),
+            user: optional_string_flag(self.user),
+            port: self.port.map(FieldChange::Set).unwrap_or_default(),
+            identity_file,
+            proxy_jump: optional_string_flag(self.proxy_jump),
+            description: optional_string_flag(self.description),
+        })
     }
 }
 
@@ -117,43 +135,6 @@ pub fn prompt_host(
     })
 }
 
-pub fn apply_flag_updates(
-    name: Option<String>,
-    flags: HostFlags,
-    preset: &SshHost,
-) -> Result<SshHost> {
-    let alias = name.unwrap_or_else(|| preset.alias.clone());
-    let hostname = merge_optional_flag(flags.hostname, preset.hostname.clone());
-    let user = merge_optional_flag(flags.user, preset.user.clone());
-    let port = flags.port.or(preset.port);
-    let identity_file = match flags.identity_file {
-        Some(value) => resolve_identity_file(&value, &alias)?,
-        None => preset.identity_file.clone(),
-    };
-    let proxy_jump = merge_optional_flag(flags.proxy_jump, preset.proxy_jump.clone());
-    let description = merge_optional_flag(flags.description, preset.description.clone());
-
-    Ok(SshHost {
-        alias,
-        description,
-        hostname,
-        user,
-        port,
-        identity_file: identity_file.clone(),
-        proxy_jump,
-        preferred_authentications: preferred_authentications_for(
-            &identity_file,
-            preset.preferred_authentications.as_deref(),
-        ),
-        forward_agent: preset.forward_agent.clone(),
-        local_forwards: preset.local_forwards.clone(),
-        remote_forwards: preset.remote_forwards.clone(),
-        set_env: preset.set_env.clone(),
-        send_env: preset.send_env.clone(),
-        extra: preset.extra.clone(),
-    })
-}
-
 fn prompt_advanced_sections(
     description: &mut Option<String>,
     proxy_jump: &mut Option<String>,
@@ -240,21 +221,6 @@ fn merge_optional_flag(flag: Option<String>, current: Option<String>) -> Option<
     }
 }
 
-pub(crate) fn preferred_authentications_for(
-    identity_file: &Option<String>,
-    current: Option<&str>,
-) -> Option<String> {
-    if identity_file.is_none() {
-        return Some(current.unwrap_or("password").to_string());
-    }
-
-    match current {
-        Some(value) if value.eq_ignore_ascii_case("password") => None,
-        Some(value) => Some(value.to_string()),
-        None => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,30 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn preferred_authentications_tracks_identity_file() {
-        assert_eq!(
-            preferred_authentications_for(&None, None),
-            Some("password".to_string())
-        );
-        assert_eq!(
-            preferred_authentications_for(&None, Some("publickey,password,keyboard-interactive")),
-            Some("publickey,password,keyboard-interactive".to_string())
-        );
-        assert_eq!(
-            preferred_authentications_for(&Some("~/.ssh/id_ed25519".to_string()), Some("password")),
-            None
-        );
-        assert_eq!(
-            preferred_authentications_for(
-                &Some("~/.ssh/id_ed25519".to_string()),
-                Some("publickey,password")
-            ),
-            Some("publickey,password".to_string())
-        );
-    }
-
-    #[test]
-    fn apply_flag_updates_treats_blank_hostname_as_clear() {
+    fn host_flags_patch_treats_blank_hostname_as_clear() {
         let preset = SshHost {
             alias: "demo".to_string(),
             hostname: Some("old.example.com".to_string()),
@@ -314,7 +257,8 @@ mod tests {
             description: None,
         };
 
-        let updated = apply_flag_updates(None, flags, &preset).unwrap();
+        let patch = flags.into_patch(&preset.alias).unwrap();
+        let updated = crate::core::hosts::apply_host_patch(&preset, None, patch);
 
         assert_eq!(updated.hostname, None);
     }

@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::config::SshHost;
+use crate::core::config::SshHost;
 
 use super::fields::EditableField;
 
