@@ -8,7 +8,7 @@ use ratatui::{
 
 use super::{
     app::{Dialog, FocusPane, TuiApp},
-    editor::FieldEditor,
+    editor::{FieldEditor, TextAreaEditor},
     fields::{self, DetailRow},
 };
 
@@ -18,10 +18,18 @@ pub(super) fn render(frame: &mut Frame, app: &TuiApp) {
     let [list_area, detail_area] =
         Layout::horizontal([Constraint::Percentage(36), Constraint::Percentage(64)]).areas(body);
 
-    render_host_list(frame, app, list_area);
+    render_left_pane(frame, app, list_area);
     render_details(frame, app, detail_area);
     render_footer(frame, app, footer);
     render_dialog(frame, app, area);
+}
+
+fn render_left_pane(frame: &mut Frame, app: &TuiApp, area: Rect) {
+    if let Some(editor) = app.text_editor.as_ref() {
+        render_text_editor(frame, editor, area);
+    } else {
+        render_host_list(frame, app, area);
+    }
 }
 
 fn render_host_list(frame: &mut Frame, app: &TuiApp, area: Rect) {
@@ -79,7 +87,9 @@ fn render_details(frame: &mut Frame, app: &TuiApp, area: Rect) {
                 .title(" Details ")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(focus_style(app.focus == FocusPane::Fields)),
+                .border_style(focus_style(
+                    app.focus == FocusPane::Fields || app.text_editor.is_some(),
+                )),
         );
         frame.render_widget(details, area);
         return;
@@ -99,7 +109,9 @@ fn render_details(frame: &mut Frame, app: &TuiApp, area: Rect) {
                 .title(title)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(focus_style(app.focus == FocusPane::Fields)),
+                .border_style(focus_style(
+                    app.focus == FocusPane::Fields || app.text_editor.is_some(),
+                )),
         )
         .highlight_style(
             Style::default()
@@ -110,7 +122,7 @@ fn render_details(frame: &mut Frame, app: &TuiApp, area: Rect) {
         .highlight_symbol(" ");
 
     let mut state = ListState::default();
-    if app.focus == FocusPane::Fields && app.dialog.is_none() {
+    if (app.focus == FocusPane::Fields || app.text_editor.is_some()) && app.dialog.is_none() {
         state.select(selected_row);
     }
     frame.render_stateful_widget(details, area, &mut state);
@@ -161,6 +173,9 @@ fn help_text(app: &TuiApp) -> &'static str {
             "Ctrl-S save  Esc cancel  Left/Right move  Home/End jump  Backspace/Delete edit"
         }
         Some(Dialog::ConfirmDelete(_)) => "y confirm  n/Esc cancel",
+        None if app.text_editor.is_some() => {
+            "Ctrl-S save  Esc cancel  Enter newline  Arrows move  Backspace/Delete edit"
+        }
         None if app.focus == FocusPane::Fields => {
             "Tab/Esc hosts  Up/k Down/j field  e/Enter edit  n new  d delete  r reload  q quit"
         }
@@ -245,6 +260,52 @@ fn render_input(frame: &mut Frame, editor: &FieldEditor, area: Rect) {
     }
 }
 
+fn render_text_editor(frame: &mut Frame, editor: &TextAreaEditor, area: Rect) {
+    let block = Block::new()
+        .title(format!(" {} ", editor.title()))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(focus_style(true));
+    let inner = block.inner(area);
+
+    frame.render_widget(block, area);
+
+    let [input_area, hint_area, example_area, error_area] = Layout::vertical([
+        Constraint::Min(3),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .areas(inner);
+
+    let width = input_area.width.saturating_sub(1) as usize;
+    let height = input_area.height as usize;
+    let (visible, cursor_col, cursor_row) =
+        visible_text_area(&editor.value, editor.cursor, width, height);
+
+    frame.render_widget(
+        Paragraph::new(visible).wrap(Wrap { trim: false }),
+        input_area,
+    );
+    frame.render_widget(
+        Paragraph::new("One entry per line").style(Style::default().fg(Color::DarkGray)),
+        hint_area,
+    );
+    frame.render_widget(
+        Paragraph::new(editor.example()).style(Style::default().fg(Color::DarkGray)),
+        example_area,
+    );
+    let error = editor.error.as_deref().unwrap_or("");
+    frame.render_widget(
+        Paragraph::new(error).style(Style::default().fg(Color::Red)),
+        error_area,
+    );
+
+    if input_area.width > 0 && input_area.height > 0 {
+        frame.set_cursor_position((input_area.x + cursor_col, input_area.y + cursor_row));
+    }
+}
+
 fn render_delete_dialog(frame: &mut Frame, alias: &str, area: Rect) {
     let popup = centered_rect(54, 5, area);
     let block = Block::new()
@@ -284,6 +345,72 @@ fn visible_input(value: &str, cursor: usize, width: usize) -> (String, u16) {
     (visible, cursor_col)
 }
 
+fn visible_text_area(
+    value: &str,
+    cursor: usize,
+    width: usize,
+    height: usize,
+) -> (String, u16, u16) {
+    if width == 0 || height == 0 {
+        return (String::new(), 0, 0);
+    }
+
+    let lines = split_lines_for_editor(value);
+    let (cursor_line, cursor_column) = cursor_position(value, cursor);
+    let start_line = if cursor_line >= height {
+        cursor_line + 1 - height
+    } else {
+        0
+    };
+    let end_line = (start_line + height).min(lines.len());
+    let column_start = if cursor_column >= width {
+        cursor_column + 1 - width
+    } else {
+        0
+    };
+
+    let visible = lines[start_line..end_line]
+        .iter()
+        .map(|line| visible_line(line, column_start, width))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let cursor_row = cursor_line.saturating_sub(start_line).min(height - 1) as u16;
+    let cursor_col = cursor_column.saturating_sub(column_start) as u16;
+
+    (visible, cursor_col, cursor_row)
+}
+
+fn split_lines_for_editor(value: &str) -> Vec<String> {
+    if value.is_empty() {
+        return vec![String::new()];
+    }
+
+    value
+        .split('\n')
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+}
+
+fn cursor_position(value: &str, cursor: usize) -> (usize, usize) {
+    let mut line = 0;
+    let mut column = 0;
+
+    for ch in value.chars().take(cursor.min(value.chars().count())) {
+        if ch == '\n' {
+            line += 1;
+            column = 0;
+        } else {
+            column += 1;
+        }
+    }
+
+    (line, column)
+}
+
+fn visible_line(value: &str, start: usize, width: usize) -> String {
+    value.chars().skip(start).take(width).collect()
+}
+
 fn centered_rect(width_percent: u16, height: u16, area: Rect) -> Rect {
     let width = area.width.saturating_mul(width_percent).saturating_div(100);
     let min_width = 32.min(area.width.max(1));
@@ -310,5 +437,21 @@ mod tests {
     fn visible_input_keeps_cursor_inside_width() {
         assert_eq!(visible_input("abcdef", 0, 4), ("abcd".to_string(), 0));
         assert_eq!(visible_input("abcdef", 6, 4), ("def".to_string(), 3));
+    }
+
+    #[test]
+    fn visible_text_area_tracks_cursor_line() {
+        assert_eq!(
+            visible_text_area("one\ntwo\nthree", 8, 10, 2),
+            ("two\nthree".to_string(), 0, 1)
+        );
+    }
+
+    #[test]
+    fn visible_text_area_scrolls_long_lines_to_cursor() {
+        assert_eq!(
+            visible_text_area("abcdef", 6, 4, 2),
+            ("def".to_string(), 3, 0)
+        );
     }
 }

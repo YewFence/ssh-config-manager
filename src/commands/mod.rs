@@ -504,7 +504,7 @@ fn prompt_directive_input_loop(
 }
 
 /// 验证 forward 格式: local_port:dest_host:dest_port
-fn validate_forward_format(input: &str) -> bool {
+pub(crate) fn validate_forward_format(input: &str) -> bool {
     let parts: Vec<&str> = input.trim().split(':').collect();
     if parts.len() != 3 {
         return false;
@@ -521,11 +521,11 @@ fn validate_forward_format(input: &str) -> bool {
     true
 }
 
-fn validate_set_env_format(input: &str) -> bool {
+pub(crate) fn validate_set_env_format(input: &str) -> bool {
     input.contains('=')
 }
 
-fn validate_send_env_format(input: &str) -> bool {
+pub(crate) fn validate_send_env_format(input: &str) -> bool {
     !input.trim().is_empty() && !input.contains('=')
 }
 

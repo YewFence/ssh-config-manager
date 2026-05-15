@@ -1,11 +1,14 @@
 use anyhow::Result;
 
 use crate::{
-    commands::{host_builder::preferred_authentications_for, normalize_identity_file_path},
+    commands::{
+        host_builder::preferred_authentications_for, normalize_identity_file_path,
+        validate_forward_format, validate_send_env_format, validate_set_env_format,
+    },
     config::{SshConfig, SshHost},
 };
 
-pub(super) const EDITABLE_FIELDS: [EditableField; 9] = [
+pub(super) const EDITABLE_FIELDS: [EditableField; 13] = [
     EditableField::Alias,
     EditableField::Description,
     EditableField::HostName,
@@ -15,6 +18,10 @@ pub(super) const EDITABLE_FIELDS: [EditableField; 9] = [
     EditableField::ProxyJump,
     EditableField::ForwardAgent,
     EditableField::PreferredAuthentications,
+    EditableField::LocalForward,
+    EditableField::RemoteForward,
+    EditableField::SetEnv,
+    EditableField::SendEnv,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +35,10 @@ pub(super) enum EditableField {
     ProxyJump,
     ForwardAgent,
     PreferredAuthentications,
+    LocalForward,
+    RemoteForward,
+    SetEnv,
+    SendEnv,
 }
 
 impl EditableField {
@@ -42,6 +53,10 @@ impl EditableField {
             Self::ProxyJump => "ProxyJump",
             Self::ForwardAgent => "ForwardAgent",
             Self::PreferredAuthentications => "PreferredAuth",
+            Self::LocalForward => "LocalForward",
+            Self::RemoteForward => "RemoteForward",
+            Self::SetEnv => "SetEnv",
+            Self::SendEnv => "SendEnv",
         }
     }
 
@@ -56,6 +71,10 @@ impl EditableField {
             Self::ProxyJump => "example: bastion",
             Self::ForwardAgent => "example: yes or no",
             Self::PreferredAuthentications => "example: publickey,password",
+            Self::LocalForward => "example: 8080:localhost:80",
+            Self::RemoteForward => "example: 9090:localhost:90",
+            Self::SetEnv => "example: APP_ENV=prod",
+            Self::SendEnv => "example: LANG LC_*",
         }
     }
 
@@ -70,7 +89,18 @@ impl EditableField {
             Self::ProxyJump => 6,
             Self::ForwardAgent => 7,
             Self::PreferredAuthentications => 8,
+            Self::LocalForward => 9,
+            Self::RemoteForward => 10,
+            Self::SetEnv => 11,
+            Self::SendEnv => 12,
         }
+    }
+
+    pub(super) fn is_multivalue(self) -> bool {
+        matches!(
+            self,
+            Self::LocalForward | Self::RemoteForward | Self::SetEnv | Self::SendEnv
+        )
     }
 
     pub(super) fn edit_value(self, host: &SshHost) -> String {
@@ -90,6 +120,10 @@ impl EditableField {
             Self::PreferredAuthentications => {
                 host.preferred_authentications.clone().unwrap_or_default()
             }
+            Self::LocalForward => host.local_forwards.join("\n"),
+            Self::RemoteForward => host.remote_forwards.join("\n"),
+            Self::SetEnv => host.set_env.join("\n"),
+            Self::SendEnv => host.send_env.join("\n"),
         }
     }
 
@@ -136,6 +170,19 @@ impl EditableField {
             Self::PreferredAuthentications => {
                 host_mut(config, host_index)?.preferred_authentications = optional_string(input);
             }
+            Self::LocalForward => {
+                host_mut(config, host_index)?.local_forwards = parse_multivalue_lines(input, self)?;
+            }
+            Self::RemoteForward => {
+                host_mut(config, host_index)?.remote_forwards =
+                    parse_multivalue_lines(input, self)?;
+            }
+            Self::SetEnv => {
+                host_mut(config, host_index)?.set_env = parse_multivalue_lines(input, self)?;
+            }
+            Self::SendEnv => {
+                host_mut(config, host_index)?.send_env = parse_multivalue_lines(input, self)?;
+            }
         }
 
         Ok(())
@@ -150,7 +197,7 @@ pub(super) struct DetailRow {
 }
 
 pub(super) fn detail_rows(host: &SshHost) -> Vec<DetailRow> {
-    let mut rows = EDITABLE_FIELDS
+    let mut rows = EDITABLE_FIELDS[..EditableField::LocalForward.index()]
         .iter()
         .copied()
         .map(|field| DetailRow {
@@ -160,10 +207,14 @@ pub(super) fn detail_rows(host: &SshHost) -> Vec<DetailRow> {
         })
         .collect::<Vec<_>>();
 
-    push_list_rows(&mut rows, "LocalForward", &host.local_forwards);
-    push_list_rows(&mut rows, "RemoteForward", &host.remote_forwards);
-    push_list_rows(&mut rows, "SetEnv", &host.set_env);
-    push_list_rows(&mut rows, "SendEnv", &host.send_env);
+    push_list_rows(&mut rows, EditableField::LocalForward, &host.local_forwards);
+    push_list_rows(
+        &mut rows,
+        EditableField::RemoteForward,
+        &host.remote_forwards,
+    );
+    push_list_rows(&mut rows, EditableField::SetEnv, &host.set_env);
+    push_list_rows(&mut rows, EditableField::SendEnv, &host.send_env);
     rows.push(DetailRow {
         label: "Extra directives".to_string(),
         value: host.extra.len().to_string(),
@@ -214,15 +265,23 @@ fn display_value(field: EditableField, host: &SshHost) -> String {
         EditableField::PreferredAuthentications => {
             optional_display(host.preferred_authentications.as_deref())
         }
+        EditableField::LocalForward => {
+            optional_display(host.local_forwards.first().map(String::as_str))
+        }
+        EditableField::RemoteForward => {
+            optional_display(host.remote_forwards.first().map(String::as_str))
+        }
+        EditableField::SetEnv => optional_display(host.set_env.first().map(String::as_str)),
+        EditableField::SendEnv => optional_display(host.send_env.first().map(String::as_str)),
     }
 }
 
-fn push_list_rows(rows: &mut Vec<DetailRow>, label: &str, values: &[String]) {
+fn push_list_rows(rows: &mut Vec<DetailRow>, field: EditableField, values: &[String]) {
     if values.is_empty() {
         rows.push(DetailRow {
-            label: label.to_string(),
+            label: field.label().to_string(),
             value: "-".to_string(),
-            field: None,
+            field: Some(field),
         });
         return;
     }
@@ -230,13 +289,54 @@ fn push_list_rows(rows: &mut Vec<DetailRow>, label: &str, values: &[String]) {
     for (index, value) in values.iter().enumerate() {
         rows.push(DetailRow {
             label: if index == 0 {
-                label.to_string()
+                field.label().to_string()
             } else {
                 String::new()
             },
             value: value.clone(),
-            field: None,
+            field: (index == 0).then_some(field),
         });
+    }
+}
+
+fn parse_multivalue_lines(input: &str, field: EditableField) -> Result<Vec<String>> {
+    let mut values = Vec::new();
+
+    for (index, line) in input.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if !validate_multivalue_line(field, trimmed) {
+            anyhow::bail!("Line {}: {}", index + 1, multivalue_error(field));
+        }
+
+        values.push(trimmed.to_string());
+    }
+
+    Ok(values)
+}
+
+fn validate_multivalue_line(field: EditableField, input: &str) -> bool {
+    match field {
+        EditableField::LocalForward | EditableField::RemoteForward => {
+            validate_forward_format(input)
+        }
+        EditableField::SetEnv => validate_set_env_format(input),
+        EditableField::SendEnv => validate_send_env_format(input),
+        _ => !input.trim().is_empty(),
+    }
+}
+
+fn multivalue_error(field: EditableField) -> &'static str {
+    match field {
+        EditableField::LocalForward | EditableField::RemoteForward => {
+            "expected local_port:dest_host:dest_port"
+        }
+        EditableField::SetEnv => "expected KEY=value",
+        EditableField::SendEnv => "expected variable names or patterns like LANG LC_*",
+        _ => "expected a non-empty value",
     }
 }
 
@@ -384,7 +484,7 @@ mod tests {
     }
 
     #[test]
-    fn detail_rows_keep_multi_value_directives_read_only() {
+    fn detail_rows_make_multi_value_directives_editable_as_groups() {
         let host = SshHost {
             alias: "demo".to_string(),
             local_forwards: vec!["8080:localhost:80".to_string()],
@@ -400,7 +500,23 @@ mod tests {
         );
         assert!(
             rows.iter()
-                .any(|row| row.label == "SendEnv" && row.field.is_none())
+                .any(|row| row.label == "SendEnv" && row.field == Some(EditableField::SendEnv))
+        );
+    }
+
+    #[test]
+    fn multi_value_fields_parse_one_entry_per_line() {
+        let mut config = config_with_hosts(&["demo"]);
+
+        EditableField::SendEnv
+            .apply(&mut config, 0, "LANG LC_*\nTERM\n")
+            .unwrap();
+
+        assert_eq!(config.hosts[0].send_env, vec!["LANG LC_*", "TERM"]);
+        assert!(
+            EditableField::SetEnv
+                .apply(&mut config, 0, "APP_ENV")
+                .is_err()
         );
     }
 }

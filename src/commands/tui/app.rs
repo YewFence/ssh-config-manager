@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::config::{self, SshConfig, SshHost};
 
 use super::{
-    editor::{EditorAction, FieldEditor},
+    editor::{EditorAction, FieldEditor, TextAreaEditor},
     fields::{self, EDITABLE_FIELDS, EditableField},
 };
 
@@ -20,6 +20,7 @@ pub(super) enum AppSignal {
 pub(super) enum FocusPane {
     Hosts,
     Fields,
+    TextEditor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +38,7 @@ pub(super) struct TuiApp {
     pub(super) selected_field: usize,
     pub(super) focus: FocusPane,
     pub(super) dialog: Option<Dialog>,
+    pub(super) text_editor: Option<TextAreaEditor>,
     pub(super) status: String,
 }
 
@@ -50,6 +52,7 @@ impl TuiApp {
             selected_field: 0,
             focus: FocusPane::Hosts,
             dialog: None,
+            text_editor: None,
             status: "Ready".to_string(),
         })
     }
@@ -65,6 +68,10 @@ impl TuiApp {
     pub(super) fn handle_key(&mut self, key: KeyEvent) -> Result<AppSignal> {
         if let Some(dialog) = self.dialog.take() {
             return self.handle_dialog_key(dialog, key);
+        }
+
+        if let Some(editor) = self.text_editor.take() {
+            return self.handle_text_editor_key(editor, key);
         }
 
         self.handle_normal_key(key)
@@ -104,6 +111,25 @@ impl TuiApp {
         Ok(AppSignal::Continue)
     }
 
+    fn handle_text_editor_key(
+        &mut self,
+        mut editor: TextAreaEditor,
+        key: KeyEvent,
+    ) -> Result<AppSignal> {
+        match editor.handle_key(key) {
+            EditorAction::Submit => self.save_text_editor(editor)?,
+            EditorAction::Cancel => {
+                self.focus = FocusPane::Fields;
+                self.status = "Edit cancelled.".to_string();
+            }
+            EditorAction::Continue => {
+                self.text_editor = Some(editor);
+            }
+        }
+
+        Ok(AppSignal::Continue)
+    }
+
     fn handle_normal_key(&mut self, key: KeyEvent) -> Result<AppSignal> {
         match key.code {
             KeyCode::Char('q') => return Ok(AppSignal::Quit),
@@ -138,6 +164,7 @@ impl TuiApp {
         match self.focus {
             FocusPane::Hosts => self.select_next_host(),
             FocusPane::Fields => self.select_next_field(),
+            FocusPane::TextEditor => {}
         }
     }
 
@@ -145,6 +172,7 @@ impl TuiApp {
         match self.focus {
             FocusPane::Hosts => self.select_previous_host(),
             FocusPane::Fields => self.select_previous_field(),
+            FocusPane::TextEditor => {}
         }
     }
 
@@ -193,6 +221,7 @@ impl TuiApp {
                 self.focus = FocusPane::Hosts;
                 self.status = "Host list focused.".to_string();
             }
+            FocusPane::TextEditor => {}
         }
     }
 
@@ -208,6 +237,13 @@ impl TuiApp {
         };
 
         let field = self.selected_field();
+        if field.is_multivalue() {
+            self.text_editor = Some(TextAreaEditor::new(field, host));
+            self.focus = FocusPane::TextEditor;
+            self.status = format!("Editing {}. One entry per line.", field.label());
+            return;
+        }
+
         self.dialog = Some(Dialog::Edit(FieldEditor::new_field(field, host)));
         self.status = format!("Editing {}.", field.label());
     }
@@ -269,6 +305,39 @@ impl TuiApp {
         Ok(())
     }
 
+    fn save_text_editor(&mut self, mut editor: TextAreaEditor) -> Result<()> {
+        let Some(host_index) = self.selected_host_index() else {
+            self.focus = FocusPane::Hosts;
+            self.status = "No host selected.".to_string();
+            return Ok(());
+        };
+
+        let mut next_config = self.config.clone();
+        if let Err(err) = editor
+            .field
+            .apply(&mut next_config, host_index, &editor.value)
+        {
+            editor.error = Some(err.to_string());
+            self.text_editor = Some(editor);
+            return Ok(());
+        }
+
+        config::save_config(&next_config, &self.config_path)?;
+
+        self.config = next_config;
+        self.selected_host = host_index;
+        self.selected_field = editor.field.index();
+        self.focus = FocusPane::Fields;
+        self.clamp_selection();
+
+        let alias = self
+            .selected_host()
+            .map(|host| host.alias.clone())
+            .unwrap_or_else(|| "host".to_string());
+        self.status = format!("Saved {} for '{}'.", editor.field.label(), alias);
+        Ok(())
+    }
+
     fn request_delete(&mut self) {
         let Some(alias) = self.selected_host().map(|host| host.alias.clone()) else {
             self.status = "No host selected.".to_string();
@@ -314,6 +383,7 @@ impl TuiApp {
             .unwrap_or(0);
         self.clamp_selection();
         self.dialog = None;
+        self.text_editor = None;
         self.status = "Reloaded ~/.ssh/config".to_string();
         Ok(())
     }
@@ -355,6 +425,7 @@ mod tests {
             selected_field: 0,
             focus: FocusPane::Hosts,
             dialog: None,
+            text_editor: None,
             status: String::new(),
         }
     }
@@ -454,6 +525,43 @@ mod tests {
             config.hosts[0].hostname.as_deref(),
             Some("demo.example.com")
         );
+    }
+
+    #[test]
+    fn edit_selected_multi_value_field_uses_left_text_editor() {
+        let mut app = app_with_hosts(&["demo"]);
+        app.focus = FocusPane::Fields;
+        app.selected_field = EditableField::SendEnv.index();
+
+        app.edit_selected_field();
+
+        assert!(app.dialog.is_none());
+        assert!(app.text_editor.is_some());
+        assert_eq!(app.focus, FocusPane::TextEditor);
+    }
+
+    #[test]
+    fn save_text_editor_writes_multi_value_field() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config");
+        config::save_config(
+            &SshConfig {
+                hosts: vec![SshHost::new("demo".to_string())],
+                header_comments: vec![],
+            },
+            &config_path,
+        )
+        .unwrap();
+        let mut app = TuiApp::load(config_path.clone()).unwrap();
+        let mut editor = TextAreaEditor::new(EditableField::SendEnv, app.selected_host().unwrap());
+        editor.value = "LANG LC_*\nTERM".to_string();
+        editor.cursor = editor.value.chars().count();
+
+        app.save_text_editor(editor).unwrap();
+
+        let config = config::load_config(&config_path).unwrap();
+        assert_eq!(config.hosts[0].send_env, vec!["LANG LC_*", "TERM"]);
+        assert_eq!(app.focus, FocusPane::Fields);
     }
 
     #[test]
