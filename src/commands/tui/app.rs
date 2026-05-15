@@ -112,6 +112,7 @@ impl TuiApp {
                 self.status = "Host list focused.".to_string();
             }
             KeyCode::Esc => return Ok(AppSignal::Quit),
+            KeyCode::Tab | KeyCode::BackTab => self.toggle_focus(),
             KeyCode::Down | KeyCode::Char('j') => self.select_next(),
             KeyCode::Up | KeyCode::Char('k') => self.select_previous(),
             KeyCode::Enter if self.focus == FocusPane::Hosts => self.focus_fields(),
@@ -183,6 +184,16 @@ impl TuiApp {
 
         self.focus = FocusPane::Fields;
         self.status = "Field list focused. Press e to edit.".to_string();
+    }
+
+    fn toggle_focus(&mut self) {
+        match self.focus {
+            FocusPane::Hosts => self.focus_fields(),
+            FocusPane::Fields => {
+                self.focus = FocusPane::Hosts;
+                self.status = "Host list focused.".to_string();
+            }
+        }
     }
 
     fn start_create(&mut self) {
@@ -397,6 +408,25 @@ mod tests {
         assert_eq!(config.hosts[0].alias, "demo");
         assert_eq!(app.focus, FocusPane::Fields);
         assert_eq!(app.selected_field, EditableField::HostName.index());
+    }
+
+    #[test]
+    fn tab_switches_between_host_and_field_panes() {
+        let mut app = app_with_hosts(&["demo"]);
+
+        app.handle_normal_key(KeyEvent::new(
+            KeyCode::Tab,
+            crossterm::event::KeyModifiers::NONE,
+        ))
+        .unwrap();
+        assert_eq!(app.focus, FocusPane::Fields);
+
+        app.handle_normal_key(KeyEvent::new(
+            KeyCode::BackTab,
+            crossterm::event::KeyModifiers::SHIFT,
+        ))
+        .unwrap();
+        assert_eq!(app.focus, FocusPane::Hosts);
     }
 
     #[test]

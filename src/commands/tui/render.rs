@@ -162,9 +162,9 @@ fn help_text(app: &TuiApp) -> &'static str {
         }
         Some(Dialog::ConfirmDelete(_)) => "y confirm  n/Esc cancel",
         None if app.focus == FocusPane::Fields => {
-            "Esc hosts  Up/k Down/j field  e/Enter edit  n new  d delete  r reload  q quit"
+            "Tab/Esc hosts  Up/k Down/j field  e/Enter edit  n new  d delete  r reload  q quit"
         }
-        None => "Up/k Down/j host  Enter fields  n new  d delete  r reload  q/Esc quit",
+        None => "Up/k Down/j host  Tab/Enter fields  n new  d delete  r reload  q/Esc quit",
     }
 }
 
