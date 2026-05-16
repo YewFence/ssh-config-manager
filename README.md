@@ -50,6 +50,9 @@ sshm edit myserver --user ubuntu   # directly update single field
 # Delete a host
 sshm delete myserver
 
+# Open full-screen terminal UI
+sshm tui
+
 # Export a backup archive
 sshm export
 
@@ -125,6 +128,19 @@ Delete a host (prompts for confirmation).
 
 ```bash
 sshm delete myserver
+```
+
+### `sshm tui`
+
+Open the full-screen terminal UI for managing hosts.
+
+- Browse hosts and inspect details
+- Create, edit, and delete hosts
+- Changes are written to `~/.ssh/config` immediately after each confirmed action
+- Host key files are not deleted
+
+```bash
+sshm tui
 ```
 
 ### `sshm clone <source> [name]`

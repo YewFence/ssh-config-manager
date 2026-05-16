@@ -10,10 +10,14 @@ pub mod open;
 pub mod prune;
 
 use std::fmt;
-use std::path::PathBuf;
 
 use anyhow::Result;
 use inquire::{Select, Text, validator::Validation};
+
+use crate::core::ssh::{
+    is_public_key, normalize_identity_file_path, sanitize_filename, validate_forward_format,
+    validate_send_env_format, validate_set_env_format,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdvancedConfigChoice {
@@ -144,52 +148,15 @@ pub fn resolve_identity_file(input: &str, alias: &str) -> Result<Option<String>>
         return Ok(Some(format!("~/.ssh/{}.pub", key_name)));
     }
 
-    // 纯文件名：不含 / 或 \
-    if !input.contains('/') && !input.contains('\\') {
-        println!("Using ~/.ssh/{} as the identity file path.", input);
-        return Ok(Some(format!("~/.ssh/{}", input)));
+    let identity_file = normalize_identity_file_path(input)?;
+    if let Some(value) = identity_file.as_deref()
+        && !input.trim().contains('/')
+        && !input.trim().contains('\\')
+    {
+        println!("Using {} as the identity file path.", value);
     }
 
-    Ok(Some(input.to_string()))
-}
-
-fn is_public_key(s: &str) -> bool {
-    let prefixes = [
-        "ssh-rsa ",
-        "ssh-ed25519 ",
-        "ssh-dss ",
-        "ecdsa-sha2-nistp256 ",
-        "ecdsa-sha2-nistp384 ",
-        "ecdsa-sha2-nistp521 ",
-        "sk-ssh-ed25519 ",
-        "sk-ecdsa-sha2-nistp256 ",
-    ];
-    prefixes.iter().any(|p| s.starts_with(p))
-}
-
-/// 展开 `~/` 前缀为实际 home 目录路径
-pub fn expand_tilde(path: &str) -> Result<PathBuf> {
-    if let Some(rest) = path.strip_prefix("~/") {
-        let home =
-            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
-        Ok(home.join(rest))
-    } else {
-        Ok(PathBuf::from(path))
-    }
-}
-
-/// hostname 转安全文件名（非字母数字替换为 _）
-pub fn sanitize_filename(hostname: &str) -> String {
-    hostname
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
+    Ok(identity_file)
 }
 
 pub fn prompt_advanced_config_choice() -> Result<AdvancedConfigChoice> {
@@ -480,32 +447,6 @@ fn prompt_directive_input_loop(
     Ok(())
 }
 
-/// 验证 forward 格式: local_port:dest_host:dest_port
-fn validate_forward_format(input: &str) -> bool {
-    let parts: Vec<&str> = input.trim().split(':').collect();
-    if parts.len() != 3 {
-        return false;
-    }
-    if parts[0].parse::<u16>().is_err() {
-        return false;
-    }
-    if parts[1].is_empty() {
-        return false;
-    }
-    if parts[2].parse::<u16>().is_err() {
-        return false;
-    }
-    true
-}
-
-fn validate_set_env_format(input: &str) -> bool {
-    input.contains('=')
-}
-
-fn validate_send_env_format(input: &str) -> bool {
-    !input.trim().is_empty() && !input.contains('=')
-}
-
 fn validate_non_empty(input: &str) -> bool {
     !input.trim().is_empty()
 }
@@ -513,8 +454,6 @@ fn validate_non_empty(input: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
     #[test]
     fn resolve_identity_file_handles_empty_bare_name_and_path() {
         assert_eq!(resolve_identity_file("", "demo").unwrap(), None);
@@ -525,27 +464,6 @@ mod tests {
         assert_eq!(
             resolve_identity_file("/tmp/id_ed25519", "demo").unwrap(),
             Some("/tmp/id_ed25519".to_string())
-        );
-    }
-
-    #[test]
-    fn sanitize_filename_replaces_unsafe_characters() {
-        assert_eq!(
-            sanitize_filename("user@example.com:2222/dev"),
-            "user_example_com_2222_dev"
-        );
-        assert_eq!(sanitize_filename("safe-host_01"), "safe-host_01");
-    }
-
-    #[test]
-    fn expand_tilde_leaves_non_tilde_paths_unchanged() {
-        assert_eq!(
-            expand_tilde("/tmp/id_ed25519").unwrap(),
-            PathBuf::from("/tmp/id_ed25519")
-        );
-        assert_eq!(
-            expand_tilde("relative/key").unwrap(),
-            PathBuf::from("relative/key")
         );
     }
 

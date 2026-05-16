@@ -1,3 +1,5 @@
+pub mod commands;
+
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -138,6 +140,12 @@ pub enum Commands {
     /// Reads ~/.ssh/config and scans the ~/.ssh/ directory listing.
     /// Read-only — no files are deleted or modified.
     Prune,
+
+    /// Open the full-screen terminal UI
+    ///
+    /// Reads and writes ~/.ssh/config. It can create, edit, and delete hosts.
+    /// Associated key files are not deleted. No network requests are made.
+    Tui,
 
     /// Open ~/.ssh directory in system file manager
     ///
