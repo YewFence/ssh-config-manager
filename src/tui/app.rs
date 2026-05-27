@@ -263,7 +263,11 @@ impl TuiApp {
         };
 
         let alias = next_config.hosts[added_index].alias.clone();
-        config::save_config(&next_config, &self.config_path)?;
+        if let Err(err) = config::save_config(&next_config, &self.config_path) {
+            editor.error = Some(format!("Save failed: {}", err));
+            self.dialog = Some(Dialog::Create(editor));
+            return Ok(());
+        }
 
         self.config = next_config;
         self.selected_host = added_index;
@@ -293,7 +297,11 @@ impl TuiApp {
             return Ok(());
         }
 
-        config::save_config(&next_config, &self.config_path)?;
+        if let Err(err) = config::save_config(&next_config, &self.config_path) {
+            editor.error = Some(format!("Save failed: {}", err));
+            self.dialog = Some(Dialog::Edit(editor));
+            return Ok(());
+        }
 
         self.config = next_config;
         self.selected_host = host_index;
@@ -325,7 +333,11 @@ impl TuiApp {
             return Ok(());
         }
 
-        config::save_config(&next_config, &self.config_path)?;
+        if let Err(err) = config::save_config(&next_config, &self.config_path) {
+            editor.error = Some(format!("Save failed: {}", err));
+            self.text_editor = Some(editor);
+            return Ok(());
+        }
 
         self.config = next_config;
         self.selected_host = host_index;
@@ -362,8 +374,16 @@ impl TuiApp {
             }
         };
 
-        hosts::delete_host(&mut next_config, &alias)?;
-        config::save_config(&next_config, &self.config_path)?;
+        if let Err(err) = hosts::delete_host(&mut next_config, &alias) {
+            self.status = err.to_string();
+            self.clamp_selection();
+            return Ok(());
+        }
+        if let Err(err) = config::save_config(&next_config, &self.config_path) {
+            self.status = format!("Delete failed: {}", err);
+            self.clamp_selection();
+            return Ok(());
+        }
 
         self.config = next_config;
         self.selected_host = index;
@@ -374,7 +394,14 @@ impl TuiApp {
 
     fn reload(&mut self) -> Result<()> {
         let selected_alias = self.selected_host().map(|host| host.alias.clone());
-        self.config = config::load_config(&self.config_path)?;
+        let config = match config::load_config(&self.config_path) {
+            Ok(config) => config,
+            Err(err) => {
+                self.status = format!("Reload failed: {}", err);
+                return Ok(());
+            }
+        };
+        self.config = config;
         self.selected_host = selected_alias
             .and_then(|alias| {
                 self.config
@@ -386,7 +413,7 @@ impl TuiApp {
         self.clamp_selection();
         self.dialog = None;
         self.text_editor = None;
-        self.status = "Reloaded ~/.ssh/config".to_string();
+        self.status = format!("Reloaded {}", self.config_path.display());
         Ok(())
     }
 

@@ -47,7 +47,17 @@ mod tests {
         assert_eq!(host.hostname.as_deref(), Some("demo.example.com"));
         assert_eq!(host.user.as_deref(), Some("ubuntu"));
         assert_eq!(host.port, Some(2222));
-        assert_eq!(host.identity_file.as_deref(), Some("~/.ssh/id_ed25519"));
+        assert_eq!(
+            host.identity_file.as_deref(),
+            Some(
+                dirs::home_dir()
+                    .unwrap()
+                    .join(".ssh")
+                    .join("id_ed25519")
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
         assert_eq!(host.proxy_jump.as_deref(), Some("bastion"));
     }
 

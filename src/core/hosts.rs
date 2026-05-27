@@ -217,6 +217,9 @@ pub fn validate_alias(
     if alias.is_empty() {
         anyhow::bail!("Alias is required.");
     }
+    if alias.contains('\n') || alias.contains('\r') {
+        anyhow::bail!("Alias cannot contain newlines.");
+    }
 
     let duplicate = config
         .hosts
@@ -231,7 +234,15 @@ pub fn validate_alias(
 }
 
 pub fn apply_host_patch(preset: &SshHost, alias: Option<String>, patch: HostPatch) -> SshHost {
+    let identity_change = patch.identity_file.clone();
     let identity_file = apply_string_change(patch.identity_file, preset.identity_file.clone());
+    let preferred_authentications = match identity_change {
+        FieldChange::Keep => preset.preferred_authentications.clone(),
+        FieldChange::Clear | FieldChange::Set(_) => preferred_authentications_for(
+            &identity_file,
+            preset.preferred_authentications.as_deref(),
+        ),
+    };
 
     SshHost {
         alias: alias.unwrap_or_else(|| preset.alias.clone()),
@@ -241,10 +252,7 @@ pub fn apply_host_patch(preset: &SshHost, alias: Option<String>, patch: HostPatc
         port: apply_port_change(patch.port, preset.port),
         identity_file: identity_file.clone(),
         proxy_jump: apply_string_change(patch.proxy_jump, preset.proxy_jump.clone()),
-        preferred_authentications: preferred_authentications_for(
-            &identity_file,
-            preset.preferred_authentications.as_deref(),
-        ),
+        preferred_authentications,
         forward_agent: preset.forward_agent.clone(),
         local_forwards: preset.local_forwards.clone(),
         remote_forwards: preset.remote_forwards.clone(),
@@ -441,6 +449,8 @@ mod tests {
 
         assert!(validate_alias(&config, Some(0), "").is_err());
         assert!(validate_alias(&config, Some(0), "prod").is_err());
+        assert!(validate_alias(&config, Some(0), "bad\nalias").is_err());
+        assert!(validate_alias(&config, Some(0), "bad\ralias").is_err());
         assert_eq!(validate_alias(&config, Some(0), " demo ").unwrap(), "demo");
     }
 
@@ -479,7 +489,7 @@ mod tests {
             port: Some(22),
             identity_file: Some("~/.ssh/id_ed25519".to_string()),
             proxy_jump: Some("bastion".to_string()),
-            preferred_authentications: None,
+            preferred_authentications: Some("publickey,password".to_string()),
             forward_agent: Some("yes".to_string()),
             local_forwards: vec!["8080:localhost:80".to_string()],
             ..Default::default()
@@ -502,8 +512,48 @@ mod tests {
         assert_eq!(updated.port, Some(2200));
         assert_eq!(updated.identity_file.as_deref(), Some("~/.ssh/id_ed25519"));
         assert_eq!(updated.proxy_jump, None);
+        assert_eq!(
+            updated.preferred_authentications.as_deref(),
+            Some("publickey,password")
+        );
         assert_eq!(updated.forward_agent.as_deref(), Some("yes"));
         assert_eq!(updated.local_forwards, vec!["8080:localhost:80"]);
+    }
+
+    #[test]
+    fn host_patch_recomputes_auth_only_when_identity_file_changes() {
+        let preset = SshHost {
+            alias: "demo".to_string(),
+            identity_file: None,
+            preferred_authentications: Some("keyboard-interactive".to_string()),
+            ..Default::default()
+        };
+
+        let unchanged = apply_host_patch(
+            &preset,
+            None,
+            HostPatch {
+                hostname: FieldChange::Set("example.com".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            unchanged.preferred_authentications.as_deref(),
+            Some("keyboard-interactive")
+        );
+
+        let cleared = apply_host_patch(
+            &preset,
+            None,
+            HostPatch {
+                identity_file: FieldChange::Clear,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            cleared.preferred_authentications.as_deref(),
+            Some("keyboard-interactive")
+        );
     }
 
     #[test]
@@ -552,7 +602,14 @@ mod tests {
 
         assert_eq!(
             config.hosts[0].identity_file.as_deref(),
-            Some("~/.ssh/id_ed25519")
+            Some(
+                dirs::home_dir()
+                    .unwrap()
+                    .join(".ssh")
+                    .join("id_ed25519")
+                    .to_string_lossy()
+                    .as_ref()
+            )
         );
         assert_eq!(config.hosts[0].preferred_authentications, None);
 

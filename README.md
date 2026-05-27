@@ -256,6 +256,7 @@ sshm is fully offline — it makes no network requests of any kind.
 | `import` | Read a local `.zip`, then write `~/.ssh/config` and matching top-level `~/.ssh/*.pub` |
 | `create`, `edit` | Read + write `~/.ssh/config` |
 | `delete` | Read + write `~/.ssh/config` |
+| `tui` | Read + write `~/.ssh/config` for interactive create/edit/delete |
 | `create`, `edit` (public key paste) | Also writes `~/.ssh/<name>.pub` |
 | `prune` | Read-only scan of `~/.ssh/` |
 | `open` | Delegates to system file manager |

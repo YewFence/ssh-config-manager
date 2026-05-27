@@ -15,7 +15,14 @@ pub fn normalize_identity_file_path(input: &str) -> Result<Option<String>> {
     }
 
     if !trimmed.contains('/') && !trimmed.contains('\\') {
-        return Ok(Some(format!("~/.ssh/{}", trimmed)));
+        let home =
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+        return Ok(Some(
+            home.join(".ssh")
+                .join(trimmed)
+                .to_string_lossy()
+                .into_owned(),
+        ));
     }
 
     Ok(Some(trimmed.to_string()))
@@ -76,7 +83,11 @@ pub fn validate_forward_format(input: &str) -> bool {
 }
 
 pub fn validate_set_env_format(input: &str) -> bool {
-    input.contains('=')
+    let trimmed = input.trim();
+    let Some((key, _value)) = trimmed.split_once('=') else {
+        return false;
+    };
+    !key.trim().is_empty()
 }
 
 pub fn validate_send_env_format(input: &str) -> bool {
@@ -108,7 +119,14 @@ mod tests {
         assert_eq!(normalize_identity_file_path("").unwrap(), None);
         assert_eq!(
             normalize_identity_file_path("id_ed25519").unwrap(),
-            Some("~/.ssh/id_ed25519".to_string())
+            Some(
+                dirs::home_dir()
+                    .unwrap()
+                    .join(".ssh")
+                    .join("id_ed25519")
+                    .to_string_lossy()
+                    .into_owned()
+            )
         );
         assert_eq!(
             normalize_identity_file_path("/tmp/id_ed25519").unwrap(),
@@ -146,6 +164,8 @@ mod tests {
 
         assert!(validate_set_env_format("APP_ENV=prod"));
         assert!(!validate_set_env_format("APP_ENV"));
+        assert!(!validate_set_env_format("=prod"));
+        assert!(!validate_set_env_format("   =prod"));
 
         assert!(validate_send_env_format("LANG LC_*"));
         assert!(!validate_send_env_format("LANG=en_US.UTF-8"));

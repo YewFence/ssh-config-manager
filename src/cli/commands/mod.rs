@@ -459,7 +459,14 @@ mod tests {
         assert_eq!(resolve_identity_file("", "demo").unwrap(), None);
         assert_eq!(
             resolve_identity_file("id_ed25519", "demo").unwrap(),
-            Some("~/.ssh/id_ed25519".to_string())
+            Some(
+                dirs::home_dir()
+                    .unwrap()
+                    .join(".ssh")
+                    .join("id_ed25519")
+                    .to_string_lossy()
+                    .into_owned()
+            )
         );
         assert_eq!(
             resolve_identity_file("/tmp/id_ed25519", "demo").unwrap(),

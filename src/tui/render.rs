@@ -332,15 +332,14 @@ fn visible_input(value: &str, cursor: usize, width: usize) -> (String, u16) {
         return (String::new(), 0);
     }
 
-    let chars = value.chars().collect::<Vec<_>>();
-    let cursor = cursor.min(chars.len());
+    let char_count = value.chars().count();
+    let cursor = cursor.min(char_count);
     let start = if cursor >= width {
         cursor + 1 - width
     } else {
         0
     };
-    let end = (start + width).min(chars.len());
-    let visible = chars[start..end].iter().collect::<String>();
+    let visible = value.chars().skip(start).take(width).collect::<String>();
     let cursor_col = (cursor - start).min(width.saturating_sub(1)) as u16;
     (visible, cursor_col)
 }
@@ -380,15 +379,12 @@ fn visible_text_area(
     (visible, cursor_col, cursor_row)
 }
 
-fn split_lines_for_editor(value: &str) -> Vec<String> {
+fn split_lines_for_editor(value: &str) -> Vec<&str> {
     if value.is_empty() {
-        return vec![String::new()];
+        return vec![""];
     }
 
-    value
-        .split('\n')
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
+    value.split('\n').collect::<Vec<_>>()
 }
 
 fn cursor_position(value: &str, cursor: usize) -> (usize, usize) {
