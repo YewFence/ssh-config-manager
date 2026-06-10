@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::config;
+use crate::core::{config, ssh::expand_tilde};
 
 const EXCLUDED_FILES: &[&str] = &[
     "config",
@@ -21,7 +21,7 @@ fn collect_referenced(config: &config::types::SshConfig) -> Result<HashSet<PathB
     let mut referenced = HashSet::new();
     for host in &config.hosts {
         if let Some(ref id_file) = host.identity_file {
-            let path = super::expand_tilde(id_file)?;
+            let path = expand_tilde(id_file)?;
             referenced.insert(path.clone());
 
             // 同时标记配对文件（私钥 ↔ .pub）

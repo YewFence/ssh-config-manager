@@ -43,7 +43,7 @@ impl SshHost {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SshConfig {
     pub hosts: Vec<SshHost>,
     pub header_comments: Vec<String>,

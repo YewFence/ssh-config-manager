@@ -50,6 +50,9 @@ sshm edit myserver --user ubuntu   # directly update single field
 # Delete a host
 sshm delete myserver
 
+# Open full-screen terminal UI
+sshm tui
+
 # Export a backup archive
 sshm export
 
@@ -125,6 +128,19 @@ Delete a host (prompts for confirmation).
 
 ```bash
 sshm delete myserver
+```
+
+### `sshm tui`
+
+Open the full-screen terminal UI for managing hosts.
+
+- Browse hosts and inspect details
+- Create, edit, and delete hosts
+- Changes are written to `~/.ssh/config` immediately after each confirmed action
+- Host key files are not deleted
+
+```bash
+sshm tui
 ```
 
 ### `sshm clone <source> [name]`
@@ -240,6 +256,7 @@ sshm is fully offline — it makes no network requests of any kind.
 | `import` | Read a local `.zip`, then write `~/.ssh/config` and matching top-level `~/.ssh/*.pub` |
 | `create`, `edit` | Read + write `~/.ssh/config` |
 | `delete` | Read + write `~/.ssh/config` |
+| `tui` | Read + write `~/.ssh/config` for interactive create/edit/delete |
 | `create`, `edit` (public key paste) | Also writes `~/.ssh/<name>.pub` |
 | `prune` | Read-only scan of `~/.ssh/` |
 | `open` | Delegates to system file manager |

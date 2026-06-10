@@ -1,8 +1,8 @@
-use crate::config;
+use crate::core::{config, hosts};
 use anyhow::Result;
 use std::path::Path;
 
-use super::host_builder::{HostFlags, apply_flag_updates, prompt_host};
+use super::host_builder::{HostFlags, prompt_host};
 
 pub fn run(name: &str, flags: HostFlags, config_path: &Path) -> Result<()> {
     let mut config = config::load_config(config_path)?;
@@ -13,13 +13,13 @@ pub fn run(name: &str, flags: HostFlags, config_path: &Path) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Host '{}' not found.", name))?;
 
     let updated = if flags.has_any() {
-        apply_flag_updates(Some(original.alias.clone()), flags, &original)?
+        let patch = flags.into_patch(&original.alias)?;
+        hosts::apply_host_patch(&original, Some(original.alias.clone()), patch)
     } else {
         prompt_host(Some(original.alias.clone()), flags, Some(&original), true)?
     };
 
-    let host = config.find_mut(name).unwrap();
-    *host = updated;
+    hosts::replace_host(&mut config, name, updated)?;
 
     config::save_config(&config, config_path)?;
     println!("Host '{}' updated.", name);
@@ -29,7 +29,7 @@ pub fn run(name: &str, flags: HostFlags, config_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{SshConfig, SshHost};
+    use crate::core::config::{SshConfig, SshHost};
 
     #[test]
     fn run_updates_flags_and_preserves_unmentioned_fields() {

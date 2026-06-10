@@ -1,4 +1,4 @@
-use crate::config;
+use crate::core::config;
 use anyhow::Result;
 use comfy_table::{Attribute, Cell, Color, Table};
 use std::path::Path;
