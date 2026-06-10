@@ -1,6 +1,9 @@
-use std::path::PathBuf;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 pub fn normalize_identity_file_path(input: &str) -> Result<Option<String>> {
     let trimmed = input.trim();
@@ -63,6 +66,55 @@ pub fn sanitize_filename(hostname: &str) -> String {
             }
         })
         .collect()
+}
+
+pub fn normalize_public_key_filename(input: &str, default_name: &str) -> Result<String> {
+    let trimmed = input.trim();
+    let name = if trimmed.is_empty() {
+        default_name.trim()
+    } else {
+        trimmed
+    };
+    let name = name.strip_suffix(".pub").unwrap_or(name);
+
+    if name.is_empty() {
+        anyhow::bail!("Filename is required.");
+    }
+    if name == "." || name == ".." || name.starts_with('.') {
+        anyhow::bail!("Filename cannot be hidden or parent-relative.");
+    }
+    if name.contains('/') || name.contains('\\') {
+        anyhow::bail!("Filename cannot contain path separators.");
+    }
+    if !name
+        .chars()
+        .all(|ch| ch.is_alphanumeric() || ch == '-' || ch == '_' || ch == '.')
+    {
+        anyhow::bail!("Filename can only contain letters, numbers, '.', '-', and '_'.");
+    }
+
+    Ok(name.to_string())
+}
+
+pub fn write_public_key_for_config(
+    config_path: &Path,
+    filename: &str,
+    public_key: &str,
+) -> Result<(String, PathBuf)> {
+    let ssh_dir = config_path
+        .parent()
+        .context("Cannot determine SSH directory from config path")?;
+    fs::create_dir_all(ssh_dir)
+        .with_context(|| format!("Failed to create {}", ssh_dir.display()))?;
+
+    let key_path = ssh_dir.join(format!("{}.pub", filename));
+    if key_path.exists() {
+        anyhow::bail!("Public key file already exists.");
+    }
+
+    fs::write(&key_path, public_key.trim())
+        .with_context(|| format!("Failed to write {}", key_path.display()))?;
+    Ok((format!("~/.ssh/{}.pub", filename), key_path))
 }
 
 pub fn validate_forward_format(input: &str) -> bool {
@@ -141,6 +193,37 @@ mod tests {
             "user_example_com_2222_dev"
         );
         assert_eq!(sanitize_filename("safe-host_01"), "safe-host_01");
+    }
+
+    #[test]
+    fn normalize_public_key_filename_uses_default_and_strips_pub_suffix() {
+        assert_eq!(
+            normalize_public_key_filename("", "demo-host").unwrap(),
+            "demo-host"
+        );
+        assert_eq!(
+            normalize_public_key_filename("demo.pub", "default").unwrap(),
+            "demo"
+        );
+        assert!(normalize_public_key_filename("../id", "default").is_err());
+        assert!(normalize_public_key_filename(".hidden", "default").is_err());
+    }
+
+    #[test]
+    fn write_public_key_for_config_writes_next_to_config() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join(".ssh").join("config");
+        let expected_key_path = temp.path().join(".ssh").join("demo.pub");
+
+        let (identity_file, key_path) =
+            write_public_key_for_config(&config_path, "demo", "ssh-ed25519 AAAA demo\n").unwrap();
+
+        assert_eq!(identity_file, "~/.ssh/demo.pub");
+        assert_eq!(key_path, expected_key_path);
+        assert_eq!(
+            std::fs::read_to_string(key_path.clone()).unwrap(),
+            "ssh-ed25519 AAAA demo"
+        );
     }
 
     #[test]

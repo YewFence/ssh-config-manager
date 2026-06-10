@@ -20,6 +20,14 @@ pub(super) struct TextAreaEditor {
     pub(super) error: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct FilenameEditor {
+    pub(super) value: String,
+    pub(super) default_name: String,
+    pub(super) cursor: usize,
+    pub(super) error: Option<String>,
+}
+
 impl FieldEditor {
     pub(super) fn new_create() -> Self {
         Self {
@@ -140,6 +148,26 @@ impl FieldEditor {
     }
 }
 
+impl FilenameEditor {
+    pub(super) fn new(default_name: String) -> Self {
+        let cursor = default_name.chars().count();
+        Self {
+            value: default_name.clone(),
+            default_name,
+            cursor,
+            error: None,
+        }
+    }
+
+    pub(super) fn handle_key(&mut self, key: KeyEvent) -> EditorAction {
+        if is_save_key(key) {
+            return EditorAction::Submit;
+        }
+
+        handle_line_key(key, &mut self.value, &mut self.cursor, &mut self.error)
+    }
+}
+
 impl TextAreaEditor {
     pub(super) fn new(field: EditableField, host: &SshHost) -> Self {
         let value = field.edit_value(host);
@@ -256,6 +284,80 @@ impl TextAreaEditor {
     fn move_vertical(&mut self, delta: isize) {
         self.cursor = move_cursor_vertical(&self.value, self.cursor, delta);
     }
+}
+
+fn handle_line_key(
+    key: KeyEvent,
+    value: &mut String,
+    cursor: &mut usize,
+    error: &mut Option<String>,
+) -> EditorAction {
+    match key.code {
+        KeyCode::Esc => EditorAction::Cancel,
+        KeyCode::Char(ch)
+            if !key
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+        {
+            insert_char(value, cursor, ch);
+            *error = None;
+            EditorAction::Continue
+        }
+        KeyCode::Backspace => {
+            backspace(value, cursor);
+            *error = None;
+            EditorAction::Continue
+        }
+        KeyCode::Delete => {
+            delete(value, *cursor);
+            *error = None;
+            EditorAction::Continue
+        }
+        KeyCode::Left => {
+            *cursor = cursor.saturating_sub(1);
+            EditorAction::Continue
+        }
+        KeyCode::Right => {
+            *cursor = (*cursor + 1).min(value.chars().count());
+            EditorAction::Continue
+        }
+        KeyCode::Home => {
+            *cursor = 0;
+            EditorAction::Continue
+        }
+        KeyCode::End => {
+            *cursor = value.chars().count();
+            EditorAction::Continue
+        }
+        _ => EditorAction::Continue,
+    }
+}
+
+fn insert_char(value: &mut String, cursor: &mut usize, ch: char) {
+    let byte_index = byte_index_for_char(value, *cursor);
+    value.insert(byte_index, ch);
+    *cursor += 1;
+}
+
+fn backspace(value: &mut String, cursor: &mut usize) {
+    if *cursor == 0 {
+        return;
+    }
+
+    let start = byte_index_for_char(value, *cursor - 1);
+    let end = byte_index_for_char(value, *cursor);
+    value.replace_range(start..end, "");
+    *cursor -= 1;
+}
+
+fn delete(value: &mut String, cursor: usize) {
+    if cursor >= value.chars().count() {
+        return;
+    }
+
+    let start = byte_index_for_char(value, cursor);
+    let end = byte_index_for_char(value, cursor + 1);
+    value.replace_range(start..end, "");
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

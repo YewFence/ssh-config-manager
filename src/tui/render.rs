@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    app::{Dialog, FocusPane, TuiApp},
+    app::{Dialog, FocusPane, PublicKeyFilenameDialog, TuiApp},
     editor::{FieldEditor, TextAreaEditor},
     fields::{self, DetailRow},
 };
@@ -172,6 +172,9 @@ fn help_text(app: &TuiApp) -> &'static str {
         Some(Dialog::Edit(_)) | Some(Dialog::Create(_)) => {
             "Ctrl-S save  Esc cancel  Left/Right move  Home/End jump  Backspace/Delete edit"
         }
+        Some(Dialog::PublicKeyFilename(_)) => {
+            "Ctrl-S save  Esc back  Left/Right move  Home/End jump  Backspace/Delete edit"
+        }
         Some(Dialog::ConfirmDelete(_)) => "y confirm  n/Esc cancel",
         None if app.text_editor.is_some() => {
             "Ctrl-S save  Esc cancel  Enter newline  Arrows move  Backspace/Delete edit"
@@ -187,6 +190,9 @@ fn render_dialog(frame: &mut Frame, app: &TuiApp, area: Rect) {
     match app.dialog.as_ref() {
         Some(Dialog::Edit(editor)) | Some(Dialog::Create(editor)) => {
             render_editor_dialog(frame, editor, area);
+        }
+        Some(Dialog::PublicKeyFilename(dialog)) => {
+            render_public_key_filename_dialog(frame, dialog, area);
         }
         Some(Dialog::ConfirmDelete(alias)) => {
             render_delete_dialog(frame, alias, area);
@@ -245,6 +251,10 @@ fn render_editor_dialog(frame: &mut Frame, editor: &FieldEditor, area: Rect) {
 }
 
 fn render_input(frame: &mut Frame, editor: &FieldEditor, area: Rect) {
+    render_input_value(frame, &editor.value, editor.cursor, area);
+}
+
+fn render_input_value(frame: &mut Frame, value: &str, cursor: usize, area: Rect) {
     let block = Block::new()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded);
@@ -252,12 +262,70 @@ fn render_input(frame: &mut Frame, editor: &FieldEditor, area: Rect) {
     frame.render_widget(block, area);
 
     let width = inner.width.saturating_sub(1) as usize;
-    let (visible, cursor_col) = visible_input(&editor.value, editor.cursor, width);
+    let (visible, cursor_col) = visible_input(value, cursor, width);
     frame.render_widget(Paragraph::new(visible).wrap(Wrap { trim: false }), inner);
 
     if inner.width > 0 {
         frame.set_cursor_position((inner.x + cursor_col, inner.y));
     }
+}
+
+fn render_public_key_filename_dialog(
+    frame: &mut Frame,
+    dialog: &PublicKeyFilenameDialog,
+    area: Rect,
+) {
+    let popup = centered_rect(70, 9, area);
+    let block = Block::new()
+        .title(" Save public key ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+
+    frame.render_widget(Clear, popup);
+    frame.render_widget(block, popup);
+
+    let [label_area, input_area, example_area, error_area, help_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .areas(inner);
+
+    frame.render_widget(
+        Paragraph::new("Filename").style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        label_area,
+    );
+
+    render_input_value(
+        frame,
+        &dialog.filename_editor.value,
+        dialog.filename_editor.cursor,
+        input_area,
+    );
+
+    frame.render_widget(
+        Paragraph::new("saved as ~/.ssh/<name>.pub").style(Style::default().fg(Color::DarkGray)),
+        example_area,
+    );
+
+    let error = dialog.filename_editor.error.as_deref().unwrap_or("");
+    frame.render_widget(
+        Paragraph::new(error).style(Style::default().fg(Color::Red)),
+        error_area,
+    );
+
+    frame.render_widget(
+        Paragraph::new("Ctrl-S save  Esc back").style(Style::default().fg(Color::DarkGray)),
+        help_area,
+    );
 }
 
 fn render_text_editor(frame: &mut Frame, editor: &TextAreaEditor, area: Rect) {

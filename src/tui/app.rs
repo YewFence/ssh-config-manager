@@ -6,10 +6,14 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::core::{
     config::{self, SshConfig, SshHost},
     hosts,
+    ssh::{
+        is_public_key, normalize_public_key_filename, sanitize_filename,
+        write_public_key_for_config,
+    },
 };
 
 use super::{
-    editor::{EditorAction, FieldEditor, TextAreaEditor},
+    editor::{EditorAction, FieldEditor, FilenameEditor, TextAreaEditor},
     fields::{EDITABLE_FIELDS, EditableField},
 };
 
@@ -30,7 +34,16 @@ pub(super) enum FocusPane {
 pub(super) enum Dialog {
     Edit(FieldEditor),
     Create(FieldEditor),
+    PublicKeyFilename(PublicKeyFilenameDialog),
     ConfirmDelete(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PublicKeyFilenameDialog {
+    pub(super) host_index: usize,
+    pub(super) public_key: String,
+    pub(super) identity_editor: FieldEditor,
+    pub(super) filename_editor: FilenameEditor,
 }
 
 #[derive(Debug)]
@@ -98,6 +111,16 @@ impl TuiApp {
                 }
                 EditorAction::Continue => {
                     self.dialog = Some(Dialog::Create(editor));
+                }
+            },
+            Dialog::PublicKeyFilename(mut dialog) => match dialog.filename_editor.handle_key(key) {
+                EditorAction::Submit => self.save_public_key_filename(dialog)?,
+                EditorAction::Cancel => {
+                    self.status = "Editing IdentityFile.".to_string();
+                    self.dialog = Some(Dialog::Edit(dialog.identity_editor));
+                }
+                EditorAction::Continue => {
+                    self.dialog = Some(Dialog::PublicKeyFilename(dialog));
                 }
             },
             Dialog::ConfirmDelete(alias) => match key.code {
@@ -290,6 +313,11 @@ impl TuiApp {
             return Ok(());
         };
 
+        if field == EditableField::IdentityFile && is_public_key(editor.value.trim()) {
+            self.start_public_key_filename(host_index, editor);
+            return Ok(());
+        }
+
         let mut next_config = self.config.clone();
         if let Err(err) = field.apply(&mut next_config, host_index, &editor.value) {
             editor.error = Some(err.to_string());
@@ -313,6 +341,85 @@ impl TuiApp {
             .map(|host| host.alias.clone())
             .unwrap_or_else(|| "host".to_string());
         self.status = format!("Saved {} for '{}'.", field.label(), alias);
+        Ok(())
+    }
+
+    fn start_public_key_filename(&mut self, host_index: usize, identity_editor: FieldEditor) {
+        let alias = self
+            .config
+            .hosts
+            .get(host_index)
+            .map(|host| host.alias.as_str())
+            .unwrap_or("host");
+        let default_name = sanitize_filename(alias);
+        let public_key = identity_editor.value.trim().to_string();
+
+        self.dialog = Some(Dialog::PublicKeyFilename(PublicKeyFilenameDialog {
+            host_index,
+            public_key,
+            identity_editor,
+            filename_editor: FilenameEditor::new(default_name),
+        }));
+        self.status = "Choose a filename for the public key.".to_string();
+    }
+
+    fn save_public_key_filename(&mut self, mut dialog: PublicKeyFilenameDialog) -> Result<()> {
+        if dialog.host_index >= self.config.hosts.len() {
+            self.status = "Host no longer exists.".to_string();
+            self.clamp_selection();
+            return Ok(());
+        }
+
+        let filename = match normalize_public_key_filename(
+            &dialog.filename_editor.value,
+            &dialog.filename_editor.default_name,
+        ) {
+            Ok(filename) => filename,
+            Err(err) => {
+                dialog.filename_editor.error = Some(err.to_string());
+                self.dialog = Some(Dialog::PublicKeyFilename(dialog));
+                return Ok(());
+            }
+        };
+
+        let (identity_file, key_path) =
+            match write_public_key_for_config(&self.config_path, &filename, &dialog.public_key) {
+                Ok(saved_key) => saved_key,
+                Err(err) => {
+                    dialog.filename_editor.error = Some(err.to_string());
+                    self.dialog = Some(Dialog::PublicKeyFilename(dialog));
+                    return Ok(());
+                }
+            };
+
+        let mut next_config = self.config.clone();
+        if let Err(err) =
+            EditableField::IdentityFile.apply(&mut next_config, dialog.host_index, &identity_file)
+        {
+            let _ = std::fs::remove_file(&key_path);
+            dialog.filename_editor.error = Some(err.to_string());
+            self.dialog = Some(Dialog::PublicKeyFilename(dialog));
+            return Ok(());
+        }
+
+        if let Err(err) = config::save_config(&next_config, &self.config_path) {
+            let _ = std::fs::remove_file(&key_path);
+            dialog.filename_editor.error = Some(format!("Save failed: {}", err));
+            self.dialog = Some(Dialog::PublicKeyFilename(dialog));
+            return Ok(());
+        }
+
+        self.config = next_config;
+        self.selected_host = dialog.host_index;
+        self.selected_field = EditableField::IdentityFile.index();
+        self.focus = FocusPane::Fields;
+        self.clamp_selection();
+
+        let alias = self
+            .selected_host()
+            .map(|host| host.alias.clone())
+            .unwrap_or_else(|| "host".to_string());
+        self.status = format!("Saved public key for '{}'.", alias);
         Ok(())
     }
 
@@ -553,6 +660,114 @@ mod tests {
         assert_eq!(
             config.hosts[0].hostname.as_deref(),
             Some("demo.example.com")
+        );
+    }
+
+    #[test]
+    fn pasted_public_key_prompts_for_filename() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join(".ssh").join("config");
+        config::save_config(
+            &SshConfig {
+                hosts: vec![SshHost::new("demo-host".to_string())],
+                header_comments: vec![],
+            },
+            &config_path,
+        )
+        .unwrap();
+        let mut app = TuiApp::load(config_path).unwrap();
+        let mut editor =
+            FieldEditor::new_field(EditableField::IdentityFile, app.selected_host().unwrap());
+        editor.value = "ssh-ed25519 AAAA demo".to_string();
+        editor.cursor = editor.value.chars().count();
+
+        app.save_field_editor(editor).unwrap();
+
+        let Some(Dialog::PublicKeyFilename(dialog)) = app.dialog else {
+            panic!("expected public key filename dialog");
+        };
+        assert_eq!(dialog.host_index, 0);
+        assert_eq!(dialog.public_key, "ssh-ed25519 AAAA demo");
+        assert_eq!(dialog.filename_editor.value, "demo-host");
+    }
+
+    #[test]
+    fn save_public_key_filename_writes_key_and_config() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join(".ssh").join("config");
+        config::save_config(
+            &SshConfig {
+                hosts: vec![SshHost {
+                    alias: "demo".to_string(),
+                    preferred_authentications: Some("password".to_string()),
+                    ..Default::default()
+                }],
+                header_comments: vec![],
+            },
+            &config_path,
+        )
+        .unwrap();
+        let mut app = TuiApp::load(config_path.clone()).unwrap();
+        let mut identity_editor =
+            FieldEditor::new_field(EditableField::IdentityFile, app.selected_host().unwrap());
+        identity_editor.value = "ssh-ed25519 AAAA demo".to_string();
+        identity_editor.cursor = identity_editor.value.chars().count();
+
+        app.save_field_editor(identity_editor).unwrap();
+        let Some(Dialog::PublicKeyFilename(mut dialog)) = app.dialog.take() else {
+            panic!("expected public key filename dialog");
+        };
+        dialog.filename_editor.value = "demo_key.pub".to_string();
+        dialog.filename_editor.cursor = dialog.filename_editor.value.chars().count();
+
+        app.save_public_key_filename(dialog).unwrap();
+
+        let key_path = temp.path().join(".ssh").join("demo_key.pub");
+        assert_eq!(
+            std::fs::read_to_string(key_path).unwrap(),
+            "ssh-ed25519 AAAA demo"
+        );
+        let config = config::load_config(&config_path).unwrap();
+        assert_eq!(
+            config.hosts[0].identity_file.as_deref(),
+            Some("~/.ssh/demo_key.pub")
+        );
+        assert_eq!(config.hosts[0].preferred_authentications, None);
+        assert_eq!(app.selected_field, EditableField::IdentityFile.index());
+    }
+
+    #[test]
+    fn save_public_key_filename_rejects_existing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join(".ssh").join("config");
+        config::save_config(
+            &SshConfig {
+                hosts: vec![SshHost::new("demo".to_string())],
+                header_comments: vec![],
+            },
+            &config_path,
+        )
+        .unwrap();
+        std::fs::write(temp.path().join(".ssh").join("demo.pub"), "existing").unwrap();
+        let mut app = TuiApp::load(config_path).unwrap();
+        let mut identity_editor =
+            FieldEditor::new_field(EditableField::IdentityFile, app.selected_host().unwrap());
+        identity_editor.value = "ssh-ed25519 AAAA demo".to_string();
+        identity_editor.cursor = identity_editor.value.chars().count();
+
+        app.save_field_editor(identity_editor).unwrap();
+        let Some(Dialog::PublicKeyFilename(dialog)) = app.dialog.take() else {
+            panic!("expected public key filename dialog");
+        };
+
+        app.save_public_key_filename(dialog).unwrap();
+
+        let Some(Dialog::PublicKeyFilename(dialog)) = app.dialog else {
+            panic!("expected public key filename dialog");
+        };
+        assert_eq!(
+            dialog.filename_editor.error.as_deref(),
+            Some("Public key file already exists.")
         );
     }
 
